@@ -7,7 +7,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 require_once(__DIR__ . '/config/db.php');
 
-// Eliminazione utente
+// Delete user
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $delete_id = (int) $_GET['delete'];
     $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
@@ -17,7 +17,7 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     exit();
 }
 
-// Aggiornamento utente
+// Update user
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update'])) {
     $user_id = (int) $_POST['user_id'];
     $email = trim($_POST['email']);
@@ -37,22 +37,23 @@ $result = mysqli_query($conn, $query);
 ?>
 
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Gestione Utenti</title>
+    <title>User Management</title>
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body class="page">
     <main class="page-shell">
         <header class="page-header">
             <div>
-                <p class="eyebrow">Amministrazione</p>
-                <h1>Gestione Utenti</h1>
-                <p class="muted">Modifica ruoli e aggiorna le informazioni.</p>
+                <p class="eyebrow">Administration</p>
+                <h1>User Management</h1>
+                <p class="muted">Edit roles and update information.</p>
             </div>
             <div class="page-actions">
-                <a class="btn" href="register.php">Crea nuovo utente</a>
+                <a class="btn" href="register.php">Create new user</a>
+                <a class="btn btn-secondary" href="settings.php">Settings</a>
             </div>
         </header>
 
@@ -61,9 +62,9 @@ $result = mysqli_query($conn, $query);
                 <thead>
                     <tr>
                         <th>Email</th>
-                        <th>Ruolo</th>
-                        <th>Data Creazione</th>
-                        <th>Modifica</th>
+                        <th>Role</th>
+                        <th>Created At</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -71,7 +72,7 @@ $result = mysqli_query($conn, $query);
                     <tr>
                         <form method="POST" action="admin_users.php">
                             <td>
-                                <input type="email" name="email" value="<?= htmlspecialchars($row['email']) ?>" placeholder="email@azienda.com" required>
+                                <input type="email" name="email" value="<?= htmlspecialchars($row['email']) ?>" placeholder="email@company.com" required>
                             </td>
                             <td>
                                 <select name="role" required>
@@ -87,8 +88,8 @@ $result = mysqli_query($conn, $query);
                             <td><?= htmlspecialchars($row['created_at']) ?></td>
                             <td class="actions">
                                 <input type="hidden" name="user_id" value="<?= $row['id'] ?>">
-                                <button type="submit" class="btn btn-primary" name="update">Salva</button>
-                                <a class="btn btn-danger" href="admin_users.php?delete=<?= $row['id'] ?>" onclick="return confirm('Confermi eliminazione?')">Elimina</a>
+                                <button type="submit" class="btn btn-primary" name="update">Save</button>
+                                <a class="btn btn-danger" href="admin_users.php?delete=<?= $row['id'] ?>" onclick="return confirm('Confirm deletion?')">Delete</a>
                             </td>
                         </form>
                     </tr>

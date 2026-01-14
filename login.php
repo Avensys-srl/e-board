@@ -2,7 +2,7 @@
 session_start();
 require_once __DIR__ . '/config/db.php';
 
-// Se l'utente e gia loggato, lo reindirizziamo alla dashboard
+// If the user is already logged in, redirect to the dashboard
 if (isset($_SESSION['user_id'])) {
     header('Location: dashboard.php');
     exit;
@@ -24,28 +24,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $result->fetch_assoc();
 
             if (password_verify($password, $user['password'])) {
-                // Login riuscito
+                // Successful login
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $username;
                 $_SESSION['role'] = $user['role'];
                 header('Location: dashboard.php');
                 exit;
             } else {
-                $error = "Password errata.";
+                $error = "Incorrect password.";
             }
         } else {
-            $error = "Utente non trovato.";
+            $error = "User not found.";
         }
 
         $stmt->close();
     } else {
-        $error = "Inserisci username e password.";
+        $error = "Enter username and password.";
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Login</title>
@@ -55,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-shell">
         <section class="auth-hero">
             <p class="eyebrow">EBOARD Manager</p>
-            <h1>Area riservata</h1>
-            <p>Accedi per gestire utenti, ruoli e configurazioni.</p>
+            <h1>Private access</h1>
+            <p>Sign in to manage users, roles, and configurations.</p>
         </section>
 
         <main class="auth-card">
@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input class="btn btn-primary" type="submit" value="Login">
             </form>
 
-            <p class="link-row">Non hai un account? <a href="register.php">Registrati</a></p>
+            <p class="link-row">Don't have an account? <a href="register.php">Register</a></p>
         </main>
     </div>
 </body>

@@ -168,6 +168,30 @@ a:hover {
   gap: 12px;
 }
 
+.settings-form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.upload-form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+}
+
+.project-form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+}
+
+.options-form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
 label {
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -184,6 +208,16 @@ select {
   border-radius: 10px;
   background: #fff;
   font-size: 0.95rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 0.95rem;
+  font-family: inherit;
 }
 
 input:focus,
@@ -251,6 +285,15 @@ input[type="submit"] {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.options-form label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 @media (min-width: 900px) {

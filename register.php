@@ -2,8 +2,8 @@
 session_start();
 require_once __DIR__ . '/config/db.php';
 
-// Se l'utente e gia loggato, vai alla dashboard
-if (isset($_SESSION['user_id'])) {
+// If a non-admin user is already logged in, go to the dashboard
+if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') !== 'admin') {
     header('Location: dashboard.php');
     exit;
 }
@@ -11,7 +11,7 @@ if (isset($_SESSION['user_id'])) {
 $error = '';
 $success = '';
 
-// Gestione form
+// Form handling
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $username = trim($_POST['username']);
@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "All fields are required.";
     } else {
 
-        // Controllo username gia esistente
+        // Check for existing username
         $check = $conn->prepare("SELECT id FROM users WHERE username = ?");
         $check->bind_param("s", $username);
         $check->execute();
@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Username already exists.";
         } else {
 
-            // Hash password
+            // Hash the password
             $password = password_hash($password_raw, PASSWORD_DEFAULT);
 
-            // Inserimento utente
+            // Insert user
             $stmt = $conn->prepare(
                 "INSERT INTO users (username, password, role, created_at)
                  VALUES (?, ?, ?, NOW())"
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>EBOARD Manager - Register</title>
@@ -63,8 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-shell">
         <section class="auth-hero">
             <p class="eyebrow">EBOARD Manager</p>
-            <h1>Crea un nuovo utente</h1>
-            <p>Assegna il ruolo corretto e condividi le credenziali in modo sicuro.</p>
+            <h1>Create a new user</h1>
+            <p>Assign the correct role and share credentials securely.</p>
         </section>
 
         <main class="auth-card">
@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <option value="supplier">Supplier</option>
                 </select>
 
-                <input class="btn btn-primary" type="submit" value="Create User">
+                <input class="btn btn-primary" type="submit" value="Create user">
             </form>
 
             <p class="link-row"><a href="login.php">Back to login</a></p>
