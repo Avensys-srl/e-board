@@ -1,0 +1,101 @@
+<?php
+session_start();
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: login.php");
+    exit();
+}
+
+require_once(__DIR__ . '/config/db.php');
+
+// Eliminazione utente
+if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
+    $delete_id = (int) $_GET['delete'];
+    $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+    $stmt->bind_param("i", $delete_id);
+    $stmt->execute();
+    header("Location: admin_users.php");
+    exit();
+}
+
+// Aggiornamento utente
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update'])) {
+    $user_id = (int) $_POST['user_id'];
+    $email = trim($_POST['email']);
+    $role = $_POST['role'];
+
+    if (!empty($email) && !empty($role)) {
+        $stmt = $conn->prepare("UPDATE users SET email = ?, role = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $email, $role, $user_id);
+        $stmt->execute();
+    }
+    header("Location: admin_users.php");
+    exit();
+}
+
+$query = "SELECT * FROM users ORDER BY role DESC";
+$result = mysqli_query($conn, $query);
+?>
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestione Utenti</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="page">
+    <main class="page-shell">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">Amministrazione</p>
+                <h1>Gestione Utenti</h1>
+                <p class="muted">Modifica ruoli e aggiorna le informazioni.</p>
+            </div>
+            <div class="page-actions">
+                <a class="btn" href="register.php">Crea nuovo utente</a>
+            </div>
+        </header>
+
+        <section class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Ruolo</th>
+                        <th>Data Creazione</th>
+                        <th>Modifica</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while ($row = mysqli_fetch_assoc($result)): ?>
+                    <tr>
+                        <form method="POST" action="admin_users.php">
+                            <td>
+                                <input type="email" name="email" value="<?= htmlspecialchars($row['email']) ?>" placeholder="email@azienda.com" required>
+                            </td>
+                            <td>
+                                <select name="role" required>
+                                    <?php
+                                    $roles = ['admin', 'designer', 'supplier', 'tester', 'coordinator', 'firmware'];
+                                    foreach ($roles as $r) {
+                                        $selected = ($row['role'] === $r) ? 'selected' : '';
+                                        echo "<option value='$r' $selected>$r</option>";
+                                    }
+                                    ?>
+                                </select>
+                            </td>
+                            <td><?= htmlspecialchars($row['created_at']) ?></td>
+                            <td class="actions">
+                                <input type="hidden" name="user_id" value="<?= $row['id'] ?>">
+                                <button type="submit" class="btn btn-primary" name="update">Salva</button>
+                                <a class="btn btn-danger" href="admin_users.php?delete=<?= $row['id'] ?>" onclick="return confirm('Confermi eliminazione?')">Elimina</a>
+                            </td>
+                        </form>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>
