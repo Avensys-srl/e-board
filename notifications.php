@@ -11,6 +11,20 @@ require_once(__DIR__ . '/config/notifications.php');
 $user_id = (int) $_SESSION['user_id'];
 $success = '';
 
+if (isset($_GET['read'])) {
+    $notification_id = (int) $_GET['read'];
+    if ($notification_id > 0) {
+        $stmt = $conn->prepare(
+            "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?"
+        );
+        $stmt->bind_param("ii", $notification_id, $user_id);
+        $stmt->execute();
+        $stmt->close();
+    }
+    header('Location: notifications.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_read'])) {
     $stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?");
     $stmt->bind_param("i", $user_id);
@@ -85,9 +99,11 @@ $unread_notifications_count = get_unread_notifications_count($conn, $user_id);
             <?php else: ?>
                 <ul class="activity-list">
                     <?php foreach ($notifications as $note): ?>
-                        <li>
+                        <li class="<?php echo $note['is_read'] ? 'is-read' : 'is-unread'; ?>">
                             <div class="activity-title">
-                                <?php echo htmlspecialchars($note['title']); ?>
+                                <a href="notifications.php?read=<?php echo (int) $note['id']; ?>">
+                                    <?php echo htmlspecialchars($note['title']); ?>
+                                </a>
                                 <?php if (!empty($note['project_code'])): ?>
                                     <strong>(<?php echo htmlspecialchars($note['project_code']); ?>)</strong>
                                 <?php endif; ?>

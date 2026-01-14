@@ -491,6 +491,10 @@ input[type="submit"] {
   padding-left: 26px;
 }
 
+.activity-list li.is-read::before {
+  background: transparent;
+}
+
 .activity-list li {
   padding: 12px 14px;
   border: 1px solid var(--border);

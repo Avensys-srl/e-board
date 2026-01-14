@@ -72,3 +72,16 @@ function notify_roles($conn, $roles, $project_id, $phase_id, $title, $message)
         }
     }
 }
+
+function notify_user($conn, $user_id, $project_id, $phase_id, $title, $message, $type = 'assignment')
+{
+    $stmt = $conn->prepare(
+        "INSERT INTO notifications (user_id, project_id, phase_id, type, title, message)
+         VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    if ($stmt) {
+        $stmt->bind_param("iiisss", $user_id, $project_id, $phase_id, $type, $title, $message);
+        $stmt->execute();
+        $stmt->close();
+    }
+}

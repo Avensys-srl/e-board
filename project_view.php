@@ -395,15 +395,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_phase_due'])) 
         $assignee_id = $assignee_id !== '' ? (int) $assignee_id : null;
         $owner_role = trim($_POST['owner_role'] ?? '');
 
+        $prev_assignee_id = null;
+        $phase_name = '';
+        $stmt = $conn->prepare(
+            "SELECT assignee_id, name FROM project_phases WHERE id = ? AND project_id = ?"
+        );
+        $stmt->bind_param("ii", $phase_id, $project_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result && $result->num_rows === 1) {
+            $row = $result->fetch_assoc();
+            $prev_assignee_id = $row['assignee_id'] !== null ? (int) $row['assignee_id'] : null;
+            $phase_name = $row['name'];
+        }
+        $stmt->close();
+
         $stmt = $conn->prepare(
             "UPDATE project_phases
              SET due_date = ?, assignee_id = ?, owner_role = ?
              WHERE id = ? AND project_id = ?"
         );
         $stmt->bind_param("sisii", $due_date, $assignee_id, $owner_role, $phase_id, $project_id);
-        $stmt->execute();
+        if ($stmt->execute()) {
+            $success = "Phase updated.";
+            if ($assignee_id !== null && $assignee_id !== $prev_assignee_id) {
+                notify_user(
+                    $conn,
+                    $assignee_id,
+                    $project_id,
+                    $phase_id,
+                    'Phase assignment',
+                    'You have been assigned to phase: ' . $phase_name,
+                    'assignment'
+                );
+            }
+        } else {
+            $error = "Unable to update phase. " . $stmt->error;
+        }
         $stmt->close();
-        $success = "Phase updated.";
     } else {
         $error = "You are not allowed to edit phases.";
     }
