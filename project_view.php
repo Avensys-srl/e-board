@@ -110,6 +110,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_project'])) {
     if (!$is_admin) {
         $error = "You are not allowed to delete this project.";
     } else {
+        $delete_files = isset($_POST['delete_files']) && $_POST['delete_files'] === '1';
+        if ($delete_files) {
+            $upload_base_path = get_setting($conn, 'upload_base_path', 'uploads');
+            $base_fs_path = resolve_upload_base_path($upload_base_path);
+            $stmt = $conn->prepare(
+                "SELECT storage_path
+                 FROM attachments
+                 WHERE project_id = ? AND storage_type = 'local' AND storage_path IS NOT NULL"
+            );
+            if ($stmt) {
+                $stmt->bind_param("i", $project_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $relative = str_replace('/', DIRECTORY_SEPARATOR, $row['storage_path']);
+                        $file_path = $base_fs_path . DIRECTORY_SEPARATOR . $relative;
+                        if (is_file($file_path)) {
+                            @unlink($file_path);
+                        }
+                    }
+                }
+                $stmt->close();
+            }
+        }
+
         $stmt = $conn->prepare("DELETE FROM projects WHERE id = ?");
         $stmt->bind_param("i", $project_id);
         if ($stmt->execute()) {
@@ -174,9 +200,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     $note = trim($_POST['submission_note'] ?? '');
     $allowed = false;
     $phase_owner_role = '';
+    $required_doc_type = '';
 
     $stmt = $conn->prepare(
-        "SELECT owner_role FROM project_phases WHERE id = ? AND project_id = ?"
+        "SELECT owner_role, required_doc_type FROM project_phases WHERE id = ? AND project_id = ?"
     );
     $stmt->bind_param("ii", $phase_id, $project_id);
     $stmt->execute();
@@ -184,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     if ($result && $result->num_rows === 1) {
         $row = $result->fetch_assoc();
         $phase_owner_role = $row['owner_role'];
+        $required_doc_type = $row['required_doc_type'] ?? '';
     }
     $stmt->close();
 
@@ -195,10 +223,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     if (!$allowed) {
         $error = "You are not allowed to submit this phase.";
     } else {
-        $stmt = $conn->prepare(
-            "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ?"
-        );
-        $stmt->bind_param("i", $phase_id);
+        if ($required_doc_type !== '') {
+            $stmt = $conn->prepare(
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ?"
+            );
+            $stmt->bind_param("is", $phase_id, $required_doc_type);
+        } else {
+            $stmt = $conn->prepare(
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ?"
+            );
+            $stmt->bind_param("i", $phase_id);
+        }
         $stmt->execute();
         $result = $stmt->get_result();
         $doc_count = 0;
@@ -356,15 +391,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_phase_due'])) 
     $role = $_SESSION['role'] ?? '';
     if ($role === 'admin' || $role === 'coordinator') {
         $due_date = $due_date !== '' ? $due_date : null;
+        $assignee_id = trim($_POST['assignee_id'] ?? '');
+        $assignee_id = $assignee_id !== '' ? (int) $assignee_id : null;
+        $owner_role = trim($_POST['owner_role'] ?? '');
+
         $stmt = $conn->prepare(
-            "UPDATE project_phases SET due_date = ? WHERE id = ? AND project_id = ?"
+            "UPDATE project_phases
+             SET due_date = ?, assignee_id = ?, owner_role = ?
+             WHERE id = ? AND project_id = ?"
         );
-        $stmt->bind_param("sii", $due_date, $phase_id, $project_id);
+        $stmt->bind_param("sisii", $due_date, $assignee_id, $owner_role, $phase_id, $project_id);
         $stmt->execute();
         $stmt->close();
-        $success = "Phase due date updated.";
+        $success = "Phase updated.";
     } else {
-        $error = "You are not allowed to edit due dates.";
+        $error = "You are not allowed to edit phases.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete'])) {
+    $phase_id = (int) ($_POST['phase_id'] ?? 0);
+    $role = $_SESSION['role'] ?? '';
+    $allowed = false;
+    $required_doc_type = '';
+
+    $stmt = $conn->prepare(
+        "SELECT owner_role, assignee_id, required_doc_type
+         FROM project_phases
+         WHERE id = ? AND project_id = ?"
+    );
+    $stmt->bind_param("ii", $phase_id, $project_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result && $result->num_rows === 1) {
+        $row = $result->fetch_assoc();
+        $required_doc_type = $row['required_doc_type'] ?? '';
+        if ($role === 'admin' || $role === 'coordinator') {
+            $allowed = true;
+        } elseif (!empty($row['assignee_id']) && (int) $row['assignee_id'] === $user_id) {
+            $allowed = true;
+        } elseif ($row['owner_role'] === $role) {
+            $allowed = true;
+        }
+    }
+    $stmt->close();
+
+    if (!$allowed) {
+        $error = "You are not allowed to complete this phase.";
+    } else {
+        if ($required_doc_type !== '') {
+            $stmt = $conn->prepare(
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ?"
+            );
+            $stmt->bind_param("is", $phase_id, $required_doc_type);
+        } else {
+            $stmt = $conn->prepare(
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ?"
+            );
+            $stmt->bind_param("i", $phase_id);
+        }
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $doc_count = 0;
+        if ($result && $result->num_rows === 1) {
+            $row = $result->fetch_assoc();
+            $doc_count = (int) $row['cnt'];
+        }
+        $stmt->close();
+
+        if ($doc_count === 0) {
+            $error = "Upload required documents before completing this phase.";
+        } else {
+            $stmt = $conn->prepare(
+                "UPDATE project_phases
+                 SET completed_at = NOW()
+                 WHERE id = ? AND project_id = ?"
+            );
+            $stmt->bind_param("ii", $phase_id, $project_id);
+            $stmt->execute();
+            $stmt->close();
+            $success = "Phase marked as complete.";
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_document_phase'])) {
+    if (!$is_admin) {
+        $error = "You are not allowed to create phases.";
+    } else {
+        $doc_type = trim($_POST['doc_phase_type'] ?? '');
+        $owner_role = trim($_POST['doc_phase_role'] ?? '');
+        $assignee_id = trim($_POST['doc_phase_assignee'] ?? '');
+        $assignee_id = $assignee_id !== '' ? (int) $assignee_id : null;
+        $name = trim($_POST['doc_phase_name'] ?? '');
+
+        if ($doc_type === '' || $owner_role === '') {
+            $error = "Document type and role are required.";
+        } else {
+            if ($name === '') {
+                $name = strtoupper($doc_type) . " Document";
+            }
+            $sequence_order = get_next_phase_sequence($conn, $project_id);
+            $stmt = $conn->prepare(
+                "INSERT INTO project_phases
+                 (project_id, name, sequence_order, owner_role, assignee_id, phase_type, required_doc_type)
+                 VALUES (?, ?, ?, ?, ?, 'document', ?)"
+            );
+            $stmt->bind_param("isisis", $project_id, $name, $sequence_order, $owner_role, $assignee_id, $doc_type);
+            if ($stmt->execute()) {
+                $success = "Document phase created.";
+            } else {
+                $error = "Unable to create document phase.";
+            }
+            $stmt->close();
+        }
     }
 }
 
@@ -455,7 +595,11 @@ if ($req_result) {
 
 $phases = [];
 $phase_result = $conn->query(
-    "SELECT * FROM project_phases WHERE project_id = " . (int) $project_id . " ORDER BY sequence_order ASC"
+    "SELECT p.*, u.username AS assignee_name
+     FROM project_phases p
+     LEFT JOIN users u ON u.id = p.assignee_id
+     WHERE p.project_id = " . (int) $project_id . "
+     ORDER BY p.sequence_order ASC"
 );
 if ($phase_result) {
     while ($row = $phase_result->fetch_assoc()) {
@@ -525,6 +669,8 @@ if ($user_result) {
         $users[] = $row;
     }
 }
+
+$roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
 ?>
 
 <!DOCTYPE html>
@@ -560,6 +706,10 @@ if ($user_result) {
                 <a class="btn btn-secondary" href="dashboard.php">Dashboard</a>
                 <?php if ($is_admin): ?>
                     <form class="inline-form" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                        <label class="delete-option">
+                            <input type="checkbox" name="delete_files" value="1">
+                            <span>Delete files</span>
+                        </label>
                         <button class="btn btn-danger" type="submit" name="delete_project" onclick="return confirm('Delete this project? This cannot be undone.');">
                             Delete project
                         </button>
@@ -725,9 +875,13 @@ if ($user_result) {
                                     <th>Sequence</th>
                                     <th>Phase</th>
                                     <th>Owner role</th>
+                                    <th>Assignee</th>
+                                    <th>Type</th>
+                                    <th>Required doc</th>
                                     <th>Due</th>
                                     <th>Status</th>
                                     <th>Mandatory</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -751,15 +905,43 @@ if ($user_result) {
                                         }
                                     }
                                     ?>
+                                    <?php
+                                    $is_completed = !empty($row['completed_at']);
+                                    $can_complete = $is_admin || $role === 'coordinator';
+                                    if (!$can_complete && !empty($row['assignee_id']) && (int) $row['assignee_id'] === $user_id) {
+                                        $can_complete = true;
+                                    }
+                                    if (!$can_complete && $row['owner_role'] === $role) {
+                                        $can_complete = true;
+                                    }
+                                    ?>
                                     <tr>
                                         <td><?php echo htmlspecialchars($row['sequence_order']); ?></td>
                                         <td><?php echo htmlspecialchars($row['name']); ?></td>
                                         <td><?php echo htmlspecialchars($row['owner_role']); ?></td>
+                                        <td><?php echo htmlspecialchars($row['assignee_name'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($row['phase_type']); ?></td>
+                                        <td><?php echo htmlspecialchars($row['required_doc_type'] ?? ''); ?></td>
                                         <td>
                                             <?php if (($role ?? '') === 'admin' || ($role ?? '') === 'coordinator'): ?>
                                                 <form class="inline-form" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
                                                     <input type="hidden" name="phase_id" value="<?php echo (int) $row['id']; ?>">
                                                     <input type="date" name="due_date" value="<?php echo htmlspecialchars($row['due_date'] ?? ''); ?>">
+                                                    <select name="assignee_id">
+                                                        <option value="">Unassigned</option>
+                                                        <?php foreach ($users as $user): ?>
+                                                            <option value="<?php echo (int) $user['id']; ?>" <?php echo ((int) $row['assignee_id'] === (int) $user['id']) ? 'selected' : ''; ?>>
+                                                                <?php echo htmlspecialchars($user['username']); ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <select name="owner_role">
+                                                        <?php foreach ($roles as $role_name): ?>
+                                                            <option value="<?php echo htmlspecialchars($role_name); ?>" <?php echo ($row['owner_role'] === $role_name) ? 'selected' : ''; ?>>
+                                                                <?php echo htmlspecialchars($role_name); ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
                                                     <button class="btn btn-secondary" type="submit" name="update_phase_due">Save</button>
                                                 </form>
                                             <?php else: ?>
@@ -768,15 +950,77 @@ if ($user_result) {
                                         </td>
                                         <td>
                                             <span class="status-dot status-<?php echo htmlspecialchars($due_status); ?>"></span>
-                                            <?php echo htmlspecialchars($due_label); ?>
+                                            <?php echo $is_completed ? 'Completed' : htmlspecialchars($due_label); ?>
                                         </td>
                                         <td><?php echo $row['is_mandatory'] ? 'Yes' : 'No'; ?></td>
+                                        <td>
+                                            <?php if (!$is_completed && $can_complete): ?>
+                                                <form class="inline-form" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                                                    <input type="hidden" name="phase_id" value="<?php echo (int) $row['id']; ?>">
+                                                    <button class="btn btn-primary" type="submit" name="mark_phase_complete">Mark complete</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <span class="muted"><?php echo $is_completed ? 'Done' : '-'; ?></span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     <?php endif; ?>
                 </section>
+
+                <?php if ($is_admin): ?>
+                <section class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Document phases</h2>
+                            <p class="muted">Assign document deliverables to specific roles.</p>
+                        </div>
+                    </div>
+                    <form class="form-grid" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                        <label for="doc_phase_name">Phase name</label>
+                        <input id="doc_phase_name" type="text" name="doc_phase_name" placeholder="e.g. Schematic package">
+
+                        <label for="doc_phase_type">Document type</label>
+                        <select id="doc_phase_type" name="doc_phase_type" required>
+                            <option value="">-- Select type --</option>
+                            <option value="schematic">Schematic</option>
+                            <option value="pcb">PCB</option>
+                            <option value="bom">BOM</option>
+                            <option value="firmware">Firmware</option>
+                            <option value="report">Test report</option>
+                            <option value="note">Technical note</option>
+                            <option value="other">Other</option>
+                        </select>
+
+                        <label for="doc_phase_role">Owner role</label>
+                        <select id="doc_phase_role" name="doc_phase_role" required>
+                            <?php foreach ($roles as $role_name): ?>
+                                <?php if ($role_name !== 'admin'): ?>
+                                    <option value="<?php echo htmlspecialchars($role_name); ?>">
+                                        <?php echo htmlspecialchars($role_name); ?>
+                                    </option>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label for="doc_phase_assignee">Assignee</label>
+                        <select id="doc_phase_assignee" name="doc_phase_assignee">
+                            <option value="">Unassigned</option>
+                            <?php foreach ($users as $user): ?>
+                                <option value="<?php echo (int) $user['id']; ?>">
+                                    <?php echo htmlspecialchars($user['username']); ?> (<?php echo htmlspecialchars($user['role']); ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <div class="actions">
+                            <button type="submit" class="btn btn-primary" name="create_document_phase">Create document phase</button>
+                        </div>
+                    </form>
+                </section>
+                <?php endif; ?>
 
                 <section class="card">
                     <div class="card-header">

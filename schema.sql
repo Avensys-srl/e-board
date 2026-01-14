@@ -144,6 +144,9 @@ CREATE TABLE IF NOT EXISTS project_phases (
   name VARCHAR(150) NOT NULL,
   sequence_order INT UNSIGNED NOT NULL,
   owner_role VARCHAR(50) NOT NULL,
+  assignee_id INT UNSIGNED NULL,
+  phase_type VARCHAR(30) NOT NULL DEFAULT 'process',
+  required_doc_type VARCHAR(50) NULL,
   current_state_id INT UNSIGNED NULL,
   due_date DATE NULL,
   started_at DATETIME NULL,
@@ -155,12 +158,16 @@ CREATE TABLE IF NOT EXISTS project_phases (
   UNIQUE KEY uq_project_phases (project_id, sequence_order),
   KEY idx_project_phases_project (project_id),
   KEY idx_project_phases_requirement (requirement_id),
+  KEY idx_project_phases_assignee (assignee_id),
   KEY idx_project_phases_state (current_state_id),
   CONSTRAINT fk_project_phases_project
     FOREIGN KEY (project_id) REFERENCES projects (id)
     ON DELETE CASCADE,
   CONSTRAINT fk_project_phases_requirement
     FOREIGN KEY (requirement_id) REFERENCES project_requirements (id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_project_phases_assignee
+    FOREIGN KEY (assignee_id) REFERENCES users (id)
     ON DELETE SET NULL,
   CONSTRAINT fk_project_phases_state
     FOREIGN KEY (current_state_id) REFERENCES workflow_states (id)

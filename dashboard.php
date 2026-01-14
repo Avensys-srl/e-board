@@ -19,6 +19,7 @@ $pending_approvals_count = 0;
 $pending_requirements_count = 0;
 $recent_notifications = [];
 $unread_notifications_count = 0;
+$assigned_phases = [];
 
 $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM projects WHERE owner_id = ?");
 $stmt->bind_param("i", $user_id);
@@ -72,6 +73,23 @@ if ($result && $result->num_rows === 1) {
 $stmt->close();
 
 $unread_notifications_count = get_unread_notifications_count($conn, $user_id);
+
+$stmt = $conn->prepare(
+    "SELECT p.id AS project_id, p.code, ph.id AS phase_id, ph.name, ph.due_date
+     FROM project_phases ph
+     JOIN projects p ON p.id = ph.project_id
+     WHERE ph.assignee_id = ? AND ph.completed_at IS NULL
+     ORDER BY ph.due_date IS NULL, ph.due_date ASC"
+);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $assigned_phases[] = $row;
+    }
+}
+$stmt->close();
 
 $stmt = $conn->prepare(
     "SELECT title, message, created_at
@@ -157,6 +175,36 @@ $stmt->close();
                         </li>
                     <?php endforeach; ?>
                 </ul>
+            <?php endif; ?>
+        </section>
+
+        <section class="card">
+            <h2>Your assigned phases</h2>
+            <?php if (empty($assigned_phases)): ?>
+                <p class="muted">No phases assigned to you.</p>
+            <?php else: ?>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Project</th>
+                            <th>Phase</th>
+                            <th>Due</th>
+                            <th>Open</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($assigned_phases as $phase): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($phase['code']); ?></td>
+                                <td><?php echo htmlspecialchars($phase['name']); ?></td>
+                                <td><?php echo htmlspecialchars($phase['due_date'] ?? ''); ?></td>
+                                <td>
+                                    <a class="btn btn-secondary" href="project_view.php?id=<?php echo (int) $phase['project_id']; ?>">Open</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             <?php endif; ?>
         </section>
     </main>
