@@ -6,6 +6,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 require_once(__DIR__ . '/config/db.php');
+require_once(__DIR__ . '/config/notifications.php');
 
 // Delete user
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
@@ -34,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update'])) {
 
 $query = "SELECT * FROM users ORDER BY role DESC";
 $result = mysqli_query($conn, $query);
+$unread_notifications_count = get_unread_notifications_count($conn, (int) $_SESSION['user_id']);
 ?>
 
 <!DOCTYPE html>
@@ -54,6 +56,15 @@ $result = mysqli_query($conn, $query);
             <div class="page-actions">
                 <a class="btn" href="register.php">Create new user</a>
                 <a class="btn btn-secondary" href="settings.php">Settings</a>
+                <a class="btn btn-secondary" href="dashboard.php">Back to dashboard</a>
+                <a class="notif-bell" href="notifications.php" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2a6 6 0 0 0-6 6v3.2c0 .8-.3 1.5-.9 2.1l-1.1 1.1v1.6h16v-1.6l-1.1-1.1c-.6-.6-.9-1.3-.9-2.1V8a6 6 0 0 0-6-6zm0 20a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2z"/>
+                    </svg>
+                    <?php if ($unread_notifications_count > 0): ?>
+                        <span class="notif-badge"><?php echo (int) $unread_notifications_count; ?></span>
+                    <?php endif; ?>
+                </a>
             </div>
         </header>
 

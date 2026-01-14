@@ -6,9 +6,13 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once(__DIR__ . '/config/db.php');
+require_once(__DIR__ . '/config/workflow.php');
+require_once(__DIR__ . '/config/notifications.php');
 
 $success = '';
 $error = '';
+$user_id = (int) ($_SESSION['user_id'] ?? 0);
+$unread_notifications_count = get_unread_notifications_count($conn, $user_id);
 
 function generate_project_code($name)
 {
@@ -30,25 +34,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_project'])) {
     if ($name === '') {
         $error = "Project name is required.";
     } else {
+        ensure_default_project_workflow($conn);
+        $draft_state_id = get_project_state_id($conn, 'draft');
         $code = generate_project_code($name);
         $owner_id = $owner_id !== '' ? (int) $owner_id : null;
         $start_date = $start_date !== '' ? $start_date : null;
 
         $stmt = $conn->prepare(
-            "INSERT INTO projects (code, name, project_type, owner_id, start_date, description, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO projects (code, name, project_type, owner_id, start_date, description, created_by, current_state_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         );
         if ($stmt) {
             $created_by = (int) $_SESSION['user_id'];
-            $stmt->bind_param("sssissi", $code, $name, $project_type, $owner_id, $start_date, $description, $created_by);
+            $stmt->bind_param("sssissii", $code, $name, $project_type, $owner_id, $start_date, $description, $created_by, $draft_state_id);
             if ($stmt->execute()) {
                 $success = "Project created.";
             } else {
-                $error = "Unable to create project.";
+                $error = "Unable to create project. " . $stmt->error;
             }
             $stmt->close();
         } else {
-            $error = "Database error while creating project.";
+            $error = "Database error while creating project. " . $conn->error;
         }
     }
 }
@@ -91,6 +97,14 @@ if ($project_result) {
                 <p class="muted">Create a new project or open an existing one.</p>
             </div>
             <div class="page-actions">
+                <a class="notif-bell" href="notifications.php" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2a6 6 0 0 0-6 6v3.2c0 .8-.3 1.5-.9 2.1l-1.1 1.1v1.6h16v-1.6l-1.1-1.1c-.6-.6-.9-1.3-.9-2.1V8a6 6 0 0 0-6-6zm0 20a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2z"/>
+                    </svg>
+                    <?php if ($unread_notifications_count > 0): ?>
+                        <span class="notif-badge"><?php echo (int) $unread_notifications_count; ?></span>
+                    <?php endif; ?>
+                </a>
                 <a class="btn btn-secondary" href="dashboard.php">Back to dashboard</a>
             </div>
         </header>

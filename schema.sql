@@ -353,6 +353,33 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS project_state_history (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_id INT UNSIGNED NOT NULL,
+  from_state_id INT UNSIGNED NULL,
+  to_state_id INT UNSIGNED NOT NULL,
+  action VARCHAR(100) NOT NULL,
+  acted_by INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_project_state_history_project (project_id),
+  KEY idx_project_state_history_from (from_state_id),
+  KEY idx_project_state_history_to (to_state_id),
+  KEY idx_project_state_history_actor (acted_by),
+  CONSTRAINT fk_project_state_history_project
+    FOREIGN KEY (project_id) REFERENCES projects (id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_project_state_history_from
+    FOREIGN KEY (from_state_id) REFERENCES workflow_states (id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_project_state_history_to
+    FOREIGN KEY (to_state_id) REFERENCES workflow_states (id)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_project_state_history_actor
+    FOREIGN KEY (acted_by) REFERENCES users (id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 INSERT INTO app_settings (setting_key, setting_value)
 VALUES
   ('upload_base_path', 'uploads'),

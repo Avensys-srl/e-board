@@ -7,9 +7,11 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 require_once(__DIR__ . '/config/db.php');
 require_once(__DIR__ . '/config/settings.php');
+require_once(__DIR__ . '/config/notifications.php');
 
 $success = '';
 $error = '';
+$unread_notifications_count = get_unread_notifications_count($conn, (int) $_SESSION['user_id']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $upload_base_path = trim($_POST['upload_base_path'] ?? '');
@@ -51,6 +53,14 @@ $upload_base_url = get_setting($conn, 'upload_base_url', '');
                 <p class="muted">Configure upload storage paths and base URLs.</p>
             </div>
             <div class="page-actions">
+                <a class="notif-bell" href="notifications.php" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2a6 6 0 0 0-6 6v3.2c0 .8-.3 1.5-.9 2.1l-1.1 1.1v1.6h16v-1.6l-1.1-1.1c-.6-.6-.9-1.3-.9-2.1V8a6 6 0 0 0-6-6zm0 20a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2z"/>
+                    </svg>
+                    <?php if ($unread_notifications_count > 0): ?>
+                        <span class="notif-badge"><?php echo (int) $unread_notifications_count; ?></span>
+                    <?php endif; ?>
+                </a>
                 <a class="btn btn-secondary" href="dashboard.php">Back to dashboard</a>
                 <a class="btn" href="admin_users.php">User management</a>
             </div>
