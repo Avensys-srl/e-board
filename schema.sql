@@ -278,6 +278,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   storage_path VARCHAR(255) NULL,
   storage_url VARCHAR(255) NULL,
   original_name VARCHAR(255) NOT NULL,
+  doc_type VARCHAR(50) NULL,
   mime_type VARCHAR(100) NULL,
   size_bytes BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
