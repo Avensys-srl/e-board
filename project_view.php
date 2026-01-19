@@ -37,53 +37,6 @@ if ($result && $result->num_rows === 1) {
 $stmt->close();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_options'])) {
-    $project_type = trim($project_type_for_requirements);
-    $required_doc_types = [];
-    if ($project_type !== '') {
-        $stmt = $conn->prepare(
-            "SELECT dt.code
-             FROM project_type_documents ptd
-             JOIN document_types dt ON dt.id = ptd.document_type_id
-             WHERE ptd.project_type = ? AND ptd.is_required = 1 AND dt.is_active = 1"
-        );
-        $stmt->bind_param("s", $project_type);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $required_doc_types[] = $row['code'];
-            }
-        }
-        $stmt->close();
-    }
-
-    $missing_docs = [];
-    if (!empty($required_doc_types)) {
-        $result = $conn->query(
-            "SELECT doc_type, COUNT(*) AS cnt
-             FROM attachments
-             WHERE project_id = " . (int) $project_id . "
-               AND phase_id IS NULL
-               AND doc_type IS NOT NULL
-               AND is_deleted = 0
-             GROUP BY doc_type"
-        );
-        $present = [];
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $present[$row['doc_type']] = (int) $row['cnt'];
-            }
-        }
-        foreach ($required_doc_types as $doc_type) {
-            if (empty($present[$doc_type])) {
-                $missing_docs[] = $doc_type;
-            }
-        }
-    }
-
-    if (!empty($missing_docs)) {
-        $error = "Upload required documents before enabling additional phases.";
-    } else {
     $options = [
         'supplier_involved' => isset($_POST['supplier_involved']) ? '1' : '0',
         'firmware_involved' => isset($_POST['firmware_involved']) ? '1' : '0',
@@ -104,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_options'])) {
         $success = "Project options saved. Generated requirements cannot be removed.";
     } else {
         $error = "Unable to save project options.";
-    }
     }
 }
 
@@ -338,46 +290,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
             if (!empty($required_docs) && !empty($missing_docs)) {
                 $error = "Upload required documents before submitting this phase.";
             } else {
-        $stmt = $conn->prepare(
-            "SELECT COUNT(*) AS cnt FROM phase_submissions WHERE phase_id = ? AND status = 'pending'"
-        );
-        $stmt->bind_param("i", $phase_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $pending = 0;
-        if ($result && $result->num_rows === 1) {
-            $row = $result->fetch_assoc();
-            $pending = (int) $row['cnt'];
-        }
-        $stmt->close();
-
-        if ($pending > 0) {
-            $error = "There is already a pending submission for this phase.";
-        } else {
-            $stmt = $conn->prepare(
-                "INSERT INTO phase_submissions (phase_id, submitted_by, submission_note)
-                 VALUES (?, ?, ?)"
-            );
-            if ($stmt) {
-                $stmt->bind_param("iis", $phase_id, $user_id, $note);
-                if ($stmt->execute()) {
-                    $success = "Phase submission sent.";
-                    notify_roles(
-                        $conn,
-                        ['coordinator', 'admin'],
-                        $project_id,
-                        $phase_id,
-                        'Phase submission',
-                        'A phase submission is waiting for review.'
-                    );
-                } else {
-                    $error = "Unable to submit phase.";
+                $stmt = $conn->prepare(
+                    "SELECT COUNT(*) AS cnt FROM phase_submissions WHERE phase_id = ? AND status = 'pending'"
+                );
+                $stmt->bind_param("i", $phase_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $pending = 0;
+                if ($result && $result->num_rows === 1) {
+                    $row = $result->fetch_assoc();
+                    $pending = (int) $row['cnt'];
                 }
                 $stmt->close();
-            } else {
-                $error = "Unable to submit phase.";
+
+                if ($pending > 0) {
+                    $error = "There is already a pending submission for this phase.";
+                } else {
+                    $stmt = $conn->prepare(
+                        "INSERT INTO phase_submissions (phase_id, submitted_by, submission_note)
+                         VALUES (?, ?, ?)"
+                    );
+                    if ($stmt) {
+                        $stmt->bind_param("iis", $phase_id, $user_id, $note);
+                        if ($stmt->execute()) {
+                            $success = "Phase submission sent.";
+                            notify_roles(
+                                $conn,
+                                ['coordinator', 'admin'],
+                                $project_id,
+                                $phase_id,
+                                'Phase submission',
+                                'A phase submission is waiting for review.'
+                            );
+                        } else {
+                            $error = "Unable to submit phase.";
+                        }
+                        $stmt->close();
+                    } else {
+                        $error = "Unable to submit phase.";
+                    }
+                }
             }
-        }
         }
     }
 }

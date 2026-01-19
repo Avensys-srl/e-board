@@ -1,0 +1,62 @@
+@startuml
+title Admin Decision Flow - EBOARD Manager
+
+start
+:Login as Admin;
+if (Authenticated?) then (yes)
+  :Open Dashboard;
+else (no)
+  stop
+endif
+
+partition ProjectAdmin {
+  :Create / Edit Project;
+  if (Project Type set?) then (yes)
+    :Generate phases from templates;
+  else (no)
+    :Define Project Type;
+  endif
+
+  :Assign phases (owner + assignee);
+  :Set due dates;
+
+  :Define phase requirements;
+  :Define phase dependencies;
+}
+
+partition Documents {
+  :Upload required documents (project/phase);
+  if (Required docs complete?) then (yes)
+    :Allow phase submission;
+  else (no)
+    :Block submission;
+  endif
+}
+
+partition Workflow {
+  :Review submissions;
+  :Approve / Reject;
+  if (Approved?) then (yes)
+    :Advance project state;
+  else (no)
+    :Request changes;
+  endif
+}
+
+partition FileManager {
+  :Move files to Trash (soft delete);
+  if (Admin hard delete?) then (yes)
+    :Delete permanently;
+  else (no)
+    :Keep in trash;
+  endif
+}
+
+partition AdminConfig {
+  :Manage document types;
+  :Map project types to phase templates;
+  :Adjust settings (upload base path/URL);
+}
+
+stop
+@enduml

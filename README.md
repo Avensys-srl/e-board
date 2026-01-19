@@ -59,7 +59,7 @@ Main pages
 - `admin_users.php`
 - `settings.php`
 - `file_manager.php`
-- `document_types.php`
+- `project_config.php`
 
 Notes
 -----
