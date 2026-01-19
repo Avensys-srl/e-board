@@ -1,318 +1,126 @@
-# EBOARD Manager – Descrizione funzionale dettagliata del progetto
-
-## 1. Scopo generale del progetto
-
-EBOARD Manager è una piattaforma software progettata per la **gestione strutturata dell’intero ciclo di vita di progetti elettronici**, con particolare riferimento a schede elettroniche, firmware, accessori e sottosistemi collegati.
-
-Il sistema nasce per:
-
-* centralizzare informazioni tecniche, documentali e decisionali;
-* ridurre errori, ambiguità e dipendenze informali;
-* garantire tracciabilità completa delle decisioni;
-* supportare processi di approvazione multi‑ruolo;
-* costituire una base solida per qualità, audit, SAV e sviluppo futuro.
-
-EBOARD Manager non è un semplice repository documentale, ma un **motore di processo** che guida persone, ruoli e stati del progetto.
-
----
-
-## 2. Ambito di applicazione
-
-Il progetto è pensato per la gestione di:
-
-* schede elettroniche (PCB, PCBA);
-* firmware e versioni software;
-* accessori elettronici e meccatronici;
-* varianti di progetto;
-* fornitori e subfornitori;
-* test, validazioni, approvazioni;
-* storicizzazione tecnica e decisionale.
-
-È applicabile sia a nuovi sviluppi sia a modifiche, retrofit o revisioni di prodotti esistenti.
-
----
-
-## 3. Architettura generale del sistema
-
-### 3.1 Tech Stack (baseline vincolante)
-
-Il progetto EBOARD Manager è progettato per funzionare su uno stack tecnologico **semplice, stabile e ampiamente supportato**, coerente con ambienti industriali e PMI.
-
-**Backend**
-
-* PHP **7.2.11 compatible** (vincolo di compatibilità)
-* Framework: Laravel (versione compatibile con PHP 7.2)
-
-**Database**
-
-* MySQL database
-
-**Ambiente di sviluppo / deploy**
-
-* XAMPP environment (Apache + PHP + MySQL)
-
-**Frontend**
-
-* Bootstrap frontend (default) **oppure** frontend custom equivalente
-* **React opzionale**, limitato esclusivamente alle **dashboard** (non obbligatorio per il core system)
-
-Lo stack è volutamente conservativo per garantire:
-
-* facilità di manutenzione;
-* ampia reperibilità di competenze;
-* riduzione del rischio tecnologico;
-* possibilità di evoluzioni progressive senza refactoring radicali.
-
----
-
-## 4. Concetto chiave: progetto come oggetto strutturato
-
-Ogni progetto gestito da EBOARD Manager è un oggetto complesso che contiene:
-
-* identità univoca;
-* stato corrente;
-* cronologia degli stati;
-* attori coinvolti;
-* documenti associati;
-* decisioni approvate;
-* commenti e richieste;
-* versioni tecniche (HW / FW).
-
-Il progetto **non è mai statico**: evolve secondo regole precise.
-
----
-
-## 5. Gestione dei ruoli
-
-Il sistema è basato su **ruoli ben definiti**, ciascuno con permessi, responsabilità e visibilità differenti.
-
-Esempi di ruoli:
-
-* Electronics Designer
-* Firmware Developer
-* Supplier
-* Test / Validation Lead
-* Project Coordinator
-* Quality / Approver
-* Admin
-
-Ogni ruolo:
-
-* vede solo ciò che è rilevante;
-* può compiere solo azioni coerenti con il proprio ruolo;
-* riceve notifiche mirate.
-
----
-
-## 6. Dashboard per ruolo
-
-Ogni utente accede a una **dashboard dedicata**, che mostra:
-
-* progetti assegnati;
-* stato di avanzamento;
-* azioni richieste;
-* approvazioni in attesa;
-* notifiche;
-* alert di blocco o ritardo.
-
-La dashboard è il punto di lavoro quotidiano.
-
----
-
-## 7. Stati del progetto
-
-Ogni progetto attraversa una serie di **stati formali**, ad esempio:
-
-* Draft
-* Submitted
-* Under Review
-* Test Requested
-* Test Completed
-* Approved
-* Rejected
-* Archived
-
-Gli stati:
-
-* sono finiti e definiti;
-* non possono essere saltati arbitrariamente;
-* sono accompagnati da regole di ingresso/uscita.
-
----
-
-## 8. Azioni e transizioni
-
-Il passaggio da uno stato all’altro avviene solo tramite **azioni esplicite**, ad esempio:
-
-* submit
-* approve
-* request modification
-* upload test report
-* reject
-
-Ogni azione:
-
-* è associata a uno o più ruoli;
-* genera una transizione di stato;
-* produce una traccia storica;
-* può generare notifiche.
-
----
-
-## 9. Sistema di notifiche
-
-EBOARD Manager include un sistema di notifiche che:
-
-* informa gli utenti quando è richiesta un’azione;
-* segnala cambi di stato;
-* evidenzia blocchi o ritardi;
-* crea una responsabilità chiara.
-
-Le notifiche sono parte integrante del flusso di lavoro.
-
----
-
-## 10. Workflow di sottomissione e approvazione
-
-Il cuore del sistema è il **workflow di approvazione**.
-
-Esempio:
-
-1. Designer carica una nuova versione
-2. Progetto passa in stato “Submitted”
-3. Reviewer riceve notifica
-4. Reviewer approva o richiede modifiche
-5. Eventuale fase di test
-6. Approvazione finale
-
-Ogni passaggio è tracciato.
-
----
-
-## 11. Gestione documentale
-
-Il sistema permette di allegare:
-
-* schemi elettrici;
-* file PCB;
-* BOM;
-* firmware;
-* report di test;
-* note tecniche;
-* documentazione di fornitore.
-
-Ogni documento è:
-
-* associato a una versione;
-* collegato a uno stato;
-* storicizzato.
-
----
-
-## 12. Versioning
-
-EBOARD Manager gestisce:
-
-* versioni di progetto;
-* revisioni hardware;
-* versioni firmware;
-* varianti.
-
-Ogni versione mantiene:
-
-* relazione con le precedenti;
-* motivazione della modifica;
-* stato di approvazione.
-
----
-
-## 13. Tracciabilità completa
-
-Il sistema garantisce tracciabilità di:
-
-* chi ha fatto cosa;
-* quando;
-* perché;
-* con quali documenti;
-* con quali decisioni.
-
-Questo è fondamentale per:
-
-* qualità;
-* audit;
-* SAV;
-* responsabilità contrattuali.
-
----
-
-## 14. Dizionario di progetto
-
-EBOARD Manager include un **dizionario condiviso**:
-
-* definizioni tecniche;
-* acronimi;
-* nomi normalizzati;
-* regole comuni.
-
-Serve a evitare ambiguità e interpretazioni personali.
-
----
-
-## 15. Separazione tra software e contenuti di esempio
-
-Il progetto distingue chiaramente:
-
-* **software EBOARD Manager**;
-* **contenuti di esempio** (diagrammi, casi reali, flussi tecnici).
-
-I contenuti di esempio:
-
-* non fanno parte del software;
-* servono come riferimento metodologico;
-* non devono influenzare lo sviluppo informatico.
-
----
-
-## 16. Supporto a flussi complessi
-
-Il sistema è pensato per gestire anche:
-
-* logiche stagionali;
-* configurazioni alternative;
-* soluzioni fool‑proof;
-* decisioni progettuali non banali.
-
-Non impone il contenuto tecnico, ma ne governa il processo.
-
----
-
-## 17. Riduzione errori e costi
-
-EBOARD Manager contribuisce a:
-
-* ridurre errori umani;
-* evitare decisioni non documentate;
-* prevenire ripetizioni inutili;
-* migliorare comunicazione con fornitori;
-* ridurre costi indiretti.
-
----
-
-## 18. Base per evoluzioni future
-
-Il progetto è una base per:
-
-* integrazione con sistemi di test automatici;
-* collegamento con sistemi di tracciabilità avanzata;
-* interfacce esterne;
-* estensione a qualità, produzione, SAV.
-
----
-
-## 19. Obiettivo finale
-
-L’obiettivo di EBOARD Manager è trasformare la gestione dei progetti elettronici da:
-
-**processo informale e frammentato** → **processo strutturato, tracciabile e ripetibile**.
-
-Questo documento è pensato come **base viva**, da estendere, dettagliare e adattare alle specifiche finali del progetto.
+EBOARD Manager - Functional Requirements (Updated)
+=================================================
+
+1. Purpose
+----------
+EBOARD Manager is a project-centric platform for structured management of
+electronics design projects (boards, firmware, accessories, subsystems).
+It centralizes technical, documentary, and decision data, supports approvals,
+and ensures traceability across the full project lifecycle.
+
+2. Scope
+--------
+The system manages:
+- electronic boards (PCB, PCBA)
+- firmware and software versions
+- accessories and mechatronic parts
+- project variants
+- suppliers and subcontractors
+- tests, validations, approvals
+- technical and decision history
+
+3. Tech Stack (baseline)
+------------------------
+- Backend: PHP 7.2.11 compatible (procedural, no framework required)
+- Database: MySQL
+- Environment: XAMPP
+- Frontend: custom HTML/CSS (Bootstrap optional)
+- React optional for dashboards only (not required)
+
+4. Core concept: Project as a structured object
+-----------------------------------------------
+Each project includes:
+- unique identity
+- current state and state history
+- involved actors and assignments
+- documents and submissions
+- approvals and decisions
+- technical versions (HW/FW)
+
+Projects evolve dynamically: workflow is generated by decisions and enforced
+constraints, not by a fixed predefined flow.
+
+5. Roles and permissions
+------------------------
+Roles include:
+- Electronics Designer
+- Firmware Developer
+- Supplier
+- Test/Validation Lead
+- Project Coordinator
+- Admin
+
+Rules:
+- Admin can do everything and assign phases to others.
+- Users see and act on phases assigned to them or matching their role.
+- Role-based notifications are required.
+
+6. Dashboard
+------------
+Each user has a dashboard that shows:
+- assigned phases
+- pending approvals
+- required actions and alerts
+- recent notifications
+
+7. State machine (project-level)
+--------------------------------
+Projects move through formal states (Draft, Submitted, Under Review, etc.).
+Transitions are explicit actions, role-bound, logged in history, and notify
+relevant roles.
+
+8. Phase workflow
+-----------------
+Phases belong to a project and have:
+- owner role
+- optional assignee
+- due date
+- completion status
+- required documents (when applicable)
+
+Phase submission requires required documents to be uploaded first.
+
+9. Document management (project-based)
+--------------------------------------
+Documents can be attached at:
+- project level
+- phase level
+- version level
+
+File manager must be project-based and include a Trash:
+- soft delete moves file to trash
+- files are never auto-deleted
+- only Admin can permanently delete
+
+10. Document types and requirements
+-----------------------------------
+Document types are managed by Admin (standard list).
+Each project type can define required document types.
+Rules:
+- Project type can be edited/renamed by Admin.
+- Project type can be deleted only if not used by any project.
+- Required documents for a type cannot be removed if the type is in use.
+
+11. Versioning
+--------------
+Internal versioning is required:
+- project_versions (label, parent, description, created_by, is_current)
+- firmware_versions (label, description, checksum)
+Documents can be linked to versions for traceability.
+
+12. Traceability
+----------------
+System must track:
+- who did what and when
+- which documents support decisions
+- approval history and state transitions
+
+13. Exclusions
+--------------
+Do NOT implement electronics logic or real-life examples as software rules.
+Examples are illustrative only.
+
+14. Goal
+--------
+Provide a clean, extensible project management platform with enforced
+constraints, approvals, and full traceability.

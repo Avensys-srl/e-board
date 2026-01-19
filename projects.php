@@ -26,7 +26,12 @@ function generate_project_code($name)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_project'])) {
     $name = trim($_POST['name'] ?? '');
-    $project_type = trim($_POST['project_type'] ?? '');
+    $project_type = trim($_POST['project_type_custom'] ?? '');
+    $project_type = preg_replace('/\s+/', ' ', $project_type);
+    if ($project_type === '') {
+        $project_type = trim($_POST['project_type_select'] ?? '');
+        $project_type = preg_replace('/\s+/', ' ', $project_type);
+    }
     $owner_id = trim($_POST['owner_id'] ?? '');
     $start_date = trim($_POST['start_date'] ?? '');
     $description = trim($_POST['description'] ?? '');
@@ -79,6 +84,19 @@ if ($project_result) {
         $projects[] = $row;
     }
 }
+
+$project_types = [];
+$type_result = $conn->query(
+    "SELECT DISTINCT project_type FROM projects WHERE project_type IS NOT NULL AND project_type <> ''
+     UNION
+     SELECT DISTINCT project_type FROM project_type_documents
+     ORDER BY project_type ASC"
+);
+if ($type_result) {
+    while ($row = $type_result->fetch_assoc()) {
+        $project_types[] = $row['project_type'];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -122,8 +140,16 @@ if ($project_result) {
                 <label for="name">Project name</label>
                 <input id="name" type="text" name="name" required>
 
-                <label for="project_type">Project type</label>
-                <input id="project_type" type="text" name="project_type" placeholder="e.g. Control Board">
+                <label for="project_type_select">Project type</label>
+                <select id="project_type_select" name="project_type_select">
+                    <option value="">-- Select project type --</option>
+                    <?php foreach ($project_types as $type): ?>
+                        <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label for="project_type_custom">Or add new project type</label>
+                <input id="project_type_custom" type="text" name="project_type_custom" placeholder="e.g. Control Board">
 
                 <label for="owner_id">Project owner</label>
                 <select id="owner_id" name="owner_id">

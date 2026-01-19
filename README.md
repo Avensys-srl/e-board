@@ -17,11 +17,13 @@ Core concepts
 Key features (current)
 ----------------------
 - Authentication and role-based access (admin, designer, firmware, tester, supplier, coordinator)
-- Project creation and project overview
+- Project creation, overview, and editable metadata (admin)
 - Dynamic requirements and phases generated from project decisions
-- Phase assignments and due dates with status indicators
-- Phase submissions and document requirements
-- Project and phase document uploads with configurable storage path/URL
+- Phase assignments with due dates and status indicators
+- Phase submissions with required documents
+- Project and phase document uploads
+- Project-based file manager with trash (soft delete), hard delete for admin only
+- Document types managed by admin and required by project type
 - Notifications (project-level and user-level) with read/unread status
 - Workflow transitions for project states with history
 - Admin settings for upload base path/URL
@@ -56,9 +58,12 @@ Main pages
 - `notifications.php`
 - `admin_users.php`
 - `settings.php`
+- `file_manager.php`
+- `document_types.php`
 
 Notes
 -----
 - Workflow is dynamic: phases and requirements are generated from decisions.
 - Mandatory requirements block approvals until resolved.
 - Phase submissions require documents before they can be sent.
+- Project types drive required document sets.

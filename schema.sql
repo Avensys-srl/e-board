@@ -286,6 +286,10 @@ CREATE TABLE IF NOT EXISTS attachments (
   storage_url VARCHAR(255) NULL,
   original_name VARCHAR(255) NOT NULL,
   doc_type VARCHAR(50) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  deleted_at DATETIME NULL,
+  deleted_by INT UNSIGNED NULL,
+  trash_path VARCHAR(255) NULL,
   mime_type VARCHAR(100) NULL,
   size_bytes BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -295,6 +299,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   KEY idx_attachments_project_version (project_version_id),
   KEY idx_attachments_firmware_version (firmware_version_id),
   KEY idx_attachments_uploaded_by (uploaded_by),
+  KEY idx_attachments_deleted (is_deleted),
   CONSTRAINT fk_attachments_project
     FOREIGN KEY (project_id) REFERENCES projects (id)
     ON DELETE CASCADE,
@@ -310,6 +315,31 @@ CREATE TABLE IF NOT EXISTS attachments (
   CONSTRAINT fk_attachments_uploaded_by
     FOREIGN KEY (uploaded_by) REFERENCES users (id)
     ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS document_types (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code VARCHAR(50) NOT NULL,
+  label VARCHAR(100) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_document_types_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_type_documents (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_type VARCHAR(100) NOT NULL,
+  document_type_id INT UNSIGNED NOT NULL,
+  is_required TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_project_type_documents (project_type, document_type_id),
+  KEY idx_project_type_documents_type (project_type),
+  KEY idx_project_type_documents_doc (document_type_id),
+  CONSTRAINT fk_project_type_documents_doc
+    FOREIGN KEY (document_type_id) REFERENCES document_types (id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS notifications (

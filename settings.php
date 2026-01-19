@@ -63,6 +63,7 @@ $upload_base_url = get_setting($conn, 'upload_base_url', '');
                 </a>
                 <a class="btn btn-secondary" href="dashboard.php">Back to dashboard</a>
                 <a class="btn" href="admin_users.php">User management</a>
+                <a class="btn" href="document_types.php">Document types</a>
             </div>
         </header>
 

@@ -92,7 +92,7 @@ if ($result) {
 $stmt->close();
 
 $stmt = $conn->prepare(
-    "SELECT title, message, created_at
+    "SELECT title, message, created_at, is_read
      FROM notifications
      WHERE user_id = ?
      ORDER BY created_at DESC
@@ -168,7 +168,7 @@ $stmt->close();
             <?php else: ?>
                 <ul class="activity-list">
                     <?php foreach ($recent_notifications as $note): ?>
-                        <li>
+                        <li class="<?php echo $note['is_read'] ? 'is-read' : 'is-unread'; ?>">
                             <div class="activity-title"><?php echo htmlspecialchars($note['title']); ?></div>
                             <div class="muted"><?php echo htmlspecialchars($note['message']); ?></div>
                             <div class="activity-meta"><?php echo htmlspecialchars($note['created_at']); ?></div>

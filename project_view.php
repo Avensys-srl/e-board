@@ -22,34 +22,67 @@ $success = '';
 $error = '';
 $user_id = (int) ($_SESSION['user_id'] ?? 0);
 $is_admin = (($_SESSION['role'] ?? '') === 'admin');
+$project_type_for_requirements = '';
 
 ensure_default_project_workflow($conn);
 
+$stmt = $conn->prepare("SELECT project_type FROM projects WHERE id = ?");
+$stmt->bind_param("i", $project_id);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($result && $result->num_rows === 1) {
+    $row = $result->fetch_assoc();
+    $project_type_for_requirements = $row['project_type'] ?? '';
+}
+$stmt->close();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_options'])) {
-    $required_doc_types = ['schematic', 'pcb', 'bom'];
-    $missing_docs = [];
-    $result = $conn->query(
-        "SELECT doc_type, COUNT(*) AS cnt
-         FROM attachments
-         WHERE project_id = " . (int) $project_id . "
-           AND phase_id IS NULL
-           AND doc_type IS NOT NULL
-         GROUP BY doc_type"
-    );
-    $present = [];
-    if ($result) {
-        while ($row = $result->fetch_assoc()) {
-            $present[$row['doc_type']] = (int) $row['cnt'];
+    $project_type = trim($project_type_for_requirements);
+    $required_doc_types = [];
+    if ($project_type !== '') {
+        $stmt = $conn->prepare(
+            "SELECT dt.code
+             FROM project_type_documents ptd
+             JOIN document_types dt ON dt.id = ptd.document_type_id
+             WHERE ptd.project_type = ? AND ptd.is_required = 1 AND dt.is_active = 1"
+        );
+        $stmt->bind_param("s", $project_type);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $required_doc_types[] = $row['code'];
+            }
         }
+        $stmt->close();
     }
-    foreach ($required_doc_types as $doc_type) {
-        if (empty($present[$doc_type])) {
-            $missing_docs[] = $doc_type;
+
+    $missing_docs = [];
+    if (!empty($required_doc_types)) {
+        $result = $conn->query(
+            "SELECT doc_type, COUNT(*) AS cnt
+             FROM attachments
+             WHERE project_id = " . (int) $project_id . "
+               AND phase_id IS NULL
+               AND doc_type IS NOT NULL
+               AND is_deleted = 0
+             GROUP BY doc_type"
+        );
+        $present = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $present[$row['doc_type']] = (int) $row['cnt'];
+            }
+        }
+        foreach ($required_doc_types as $doc_type) {
+            if (empty($present[$doc_type])) {
+                $missing_docs[] = $doc_type;
+            }
         }
     }
 
     if (!empty($missing_docs)) {
-        $error = "Upload required documents (Schematic, PCB, BOM) before enabling additional phases.";
+        $error = "Upload required documents before enabling additional phases.";
     } else {
     $options = [
         'supplier_involved' => isset($_POST['supplier_involved']) ? '1' : '0',
@@ -80,7 +113,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
         $error = "You are not allowed to update this project.";
     } else {
         $name = trim($_POST['project_name'] ?? '');
-        $project_type = trim($_POST['project_type'] ?? '');
+        $project_type = trim($_POST['project_type_custom'] ?? '');
+        $project_type = preg_replace('/\s+/', ' ', $project_type);
+        if ($project_type === '') {
+            $project_type = trim($_POST['project_type_select'] ?? '');
+            $project_type = preg_replace('/\s+/', ' ', $project_type);
+        }
         $owner_id = trim($_POST['owner_id'] ?? '');
         $start_date = trim($_POST['start_date'] ?? '');
         $description = trim($_POST['description'] ?? '');
@@ -99,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
             if ($stmt->execute()) {
                 $success = "Project updated.";
             } else {
-                $error = "Unable to update project.";
+                $error = "Unable to update project. " . $stmt->error;
             }
             $stmt->close();
         }
@@ -115,9 +153,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_project'])) {
             $upload_base_path = get_setting($conn, 'upload_base_path', 'uploads');
             $base_fs_path = resolve_upload_base_path($upload_base_path);
             $stmt = $conn->prepare(
-                "SELECT storage_path
+                "SELECT storage_path, trash_path
                  FROM attachments
-                 WHERE project_id = ? AND storage_type = 'local' AND storage_path IS NOT NULL"
+                 WHERE project_id = ? AND storage_type = 'local'"
             );
             if ($stmt) {
                 $stmt->bind_param("i", $project_id);
@@ -125,10 +163,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_project'])) {
                 $result = $stmt->get_result();
                 if ($result) {
                     while ($row = $result->fetch_assoc()) {
-                        $relative = str_replace('/', DIRECTORY_SEPARATOR, $row['storage_path']);
-                        $file_path = $base_fs_path . DIRECTORY_SEPARATOR . $relative;
-                        if (is_file($file_path)) {
-                            @unlink($file_path);
+                        if (!empty($row['storage_path'])) {
+                            $relative = str_replace('/', DIRECTORY_SEPARATOR, $row['storage_path']);
+                            $file_path = $base_fs_path . DIRECTORY_SEPARATOR . $relative;
+                            if (is_file($file_path)) {
+                                @unlink($file_path);
+                            }
+                        }
+                        if (!empty($row['trash_path'])) {
+                            $relative = str_replace('/', DIRECTORY_SEPARATOR, $row['trash_path']);
+                            $file_path = $base_fs_path . DIRECTORY_SEPARATOR . $relative;
+                            if (is_file($file_path)) {
+                                @unlink($file_path);
+                            }
                         }
                     }
                 }
@@ -225,12 +272,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     } else {
         if ($required_doc_type !== '') {
             $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ?"
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
             );
             $stmt->bind_param("is", $phase_id, $required_doc_type);
         } else {
             $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ?"
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND is_deleted = 0"
             );
             $stmt->bind_param("i", $phase_id);
         }
@@ -470,12 +517,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete']
     } else {
         if ($required_doc_type !== '') {
             $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ?"
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
             );
             $stmt->bind_param("is", $phase_id, $required_doc_type);
         } else {
             $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ?"
+                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND is_deleted = 0"
             );
             $stmt->bind_param("i", $phase_id);
         }
@@ -654,10 +701,33 @@ if ($phase_submission_result) {
 $project_notifications = get_project_notifications($conn, $project_id, 8);
 $unread_notifications_count = get_unread_notifications_count($conn, $user_id);
 
+$document_types = [];
+$doc_type_result = $conn->query(
+    "SELECT id, code, label FROM document_types WHERE is_active = 1 ORDER BY label ASC"
+);
+if ($doc_type_result) {
+    while ($row = $doc_type_result->fetch_assoc()) {
+        $document_types[] = $row;
+    }
+}
+
+$project_types = [];
+$type_result = $conn->query(
+    "SELECT DISTINCT project_type FROM projects WHERE project_type IS NOT NULL AND project_type <> ''
+     UNION
+     SELECT DISTINCT project_type FROM project_type_documents
+     ORDER BY project_type ASC"
+);
+if ($type_result) {
+    while ($row = $type_result->fetch_assoc()) {
+        $project_types[] = $row['project_type'];
+    }
+}
+
 $project_documents = [];
 $docs_result = $conn->query(
     "SELECT * FROM attachments
-     WHERE project_id = " . (int) $project_id . " AND phase_id IS NULL
+     WHERE project_id = " . (int) $project_id . " AND phase_id IS NULL AND is_deleted = 0
      ORDER BY created_at DESC"
 );
 if ($docs_result) {
@@ -671,7 +741,7 @@ $phase_docs_result = $conn->query(
     "SELECT a.*, p.name AS phase_name
      FROM attachments a
      JOIN project_phases p ON p.id = a.phase_id
-     WHERE p.project_id = " . (int) $project_id . "
+     WHERE p.project_id = " . (int) $project_id . " AND a.is_deleted = 0
      ORDER BY a.created_at DESC"
 );
 if ($phase_docs_result) {
@@ -680,7 +750,25 @@ if ($phase_docs_result) {
     }
 }
 
-$required_doc_types = ['schematic', 'pcb', 'bom'];
+$required_doc_types = [];
+$project_type = trim($project['project_type'] ?? '');
+if ($project_type !== '') {
+    $stmt = $conn->prepare(
+        "SELECT dt.code
+         FROM project_type_documents ptd
+         JOIN document_types dt ON dt.id = ptd.document_type_id
+         WHERE ptd.project_type = ? AND ptd.is_required = 1 AND dt.is_active = 1"
+    );
+    $stmt->bind_param("s", $project_type);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $required_doc_types[] = $row['code'];
+        }
+    }
+    $stmt->close();
+}
 $required_docs_status = [];
 foreach ($required_doc_types as $doc_type) {
     $required_docs_status[$doc_type] = false;
@@ -772,8 +860,18 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                             <label for="project_name">Project name</label>
                             <input id="project_name" type="text" name="project_name" value="<?php echo htmlspecialchars($project['name']); ?>" required>
 
-                            <label for="project_type">Project type</label>
-                            <input id="project_type" type="text" name="project_type" value="<?php echo htmlspecialchars($project['project_type'] ?? ''); ?>">
+                            <label for="project_type_select">Project type</label>
+                            <select id="project_type_select" name="project_type_select">
+                                <option value="">-- Select project type --</option>
+                                <?php foreach ($project_types as $type): ?>
+                                    <option value="<?php echo htmlspecialchars($type); ?>" <?php echo (($project['project_type'] ?? '') === $type) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($type); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <label for="project_type_custom">Or add new project type</label>
+                            <input id="project_type_custom" type="text" name="project_type_custom" placeholder="Enter new type">
 
                             <label for="owner_id">Project owner</label>
                             <select id="owner_id" name="owner_id">
@@ -1057,26 +1155,33 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                             <h2>Project documents</h2>
                             <p class="muted">Upload required documents before enabling other phases.</p>
                         </div>
+                        <a class="btn btn-secondary" href="file_manager.php?project_id=<?php echo (int) $project_id; ?>">File manager</a>
                     </div>
-                    <div class="doc-status">
-                        <?php foreach ($required_docs_status as $doc_type => $is_done): ?>
-                            <div class="doc-status-item">
-                                <span class="status-dot status-<?php echo $is_done ? 'on-track' : 'overdue'; ?>"></span>
-                                <?php echo strtoupper($doc_type); ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+                        <div class="doc-status">
+                            <?php if (empty($required_docs_status)): ?>
+                                <p class="muted">No required document types configured for this project type.</p>
+                            <?php else: ?>
+                                <?php foreach ($required_docs_status as $doc_type => $is_done): ?>
+                                    <div class="doc-status-item">
+                                        <span class="status-dot status-<?php echo $is_done ? 'on-track' : 'overdue'; ?>"></span>
+                                        <?php echo strtoupper($doc_type); ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
 
                     <form class="document-form" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>" enctype="multipart/form-data">
                         <label for="doc_type">Document type</label>
                         <select id="doc_type" name="doc_type" required>
                             <option value="">-- Select type --</option>
-                            <option value="schematic">Schematic</option>
-                            <option value="pcb">PCB</option>
-                            <option value="bom">BOM</option>
-                            <option value="report">Test report</option>
-                            <option value="note">Technical note</option>
-                            <option value="other">Other</option>
+                            <?php foreach ($document_types as $doc_type): ?>
+                                <option value="<?php echo htmlspecialchars($doc_type['code']); ?>">
+                                    <?php echo htmlspecialchars($doc_type['label']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            <?php if (empty($document_types)): ?>
+                                <option value="other">Other</option>
+                            <?php endif; ?>
                         </select>
 
                         <label for="document_phase_id">Attach to phase (optional)</label>
@@ -1155,10 +1260,14 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
 
                         <label for="phase_doc_type">Document type</label>
                         <select id="phase_doc_type" name="phase_doc_type">
-                            <option value="report">Test report</option>
-                            <option value="spec">Specification</option>
-                            <option value="note">Technical note</option>
-                            <option value="other">Other</option>
+                            <?php foreach ($document_types as $doc_type): ?>
+                                <option value="<?php echo htmlspecialchars($doc_type['code']); ?>">
+                                    <?php echo htmlspecialchars($doc_type['label']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            <?php if (empty($document_types)): ?>
+                                <option value="other">Other</option>
+                            <?php endif; ?>
                         </select>
 
                         <label for="phase_document_file">File</label>
