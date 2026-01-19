@@ -270,29 +270,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     if (!$allowed) {
         $error = "You are not allowed to submit this phase.";
     } else {
-        if ($required_doc_type !== '') {
-            $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
-            );
-            $stmt->bind_param("is", $phase_id, $required_doc_type);
-        } else {
-            $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND is_deleted = 0"
-            );
-            $stmt->bind_param("i", $phase_id);
-        }
+        $dependencies_ok = true;
+        $stmt = $conn->prepare(
+            "SELECT d.depends_on_phase_id, p.completed_at
+             FROM phase_dependencies d
+             JOIN project_phases p ON p.id = d.depends_on_phase_id
+             WHERE d.phase_id = ?"
+        );
+        $stmt->bind_param("i", $phase_id);
         $stmt->execute();
         $result = $stmt->get_result();
-        $doc_count = 0;
-        if ($result && $result->num_rows === 1) {
-            $row = $result->fetch_assoc();
-            $doc_count = (int) $row['cnt'];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                if (empty($row['completed_at'])) {
+                    $dependencies_ok = false;
+                    break;
+                }
+            }
         }
         $stmt->close();
 
-        if ($doc_count === 0) {
-            $error = "Upload required documents before submitting this phase.";
+        if (!$dependencies_ok) {
+            $error = "Complete required phases before submitting this phase.";
         } else {
+            $required_docs = [];
+            $stmt = $conn->prepare(
+                "SELECT dt.code
+                 FROM phase_required_documents prd
+                 JOIN document_types dt ON dt.id = prd.document_type_id
+                 WHERE prd.phase_id = ? AND prd.is_required = 1 AND dt.is_active = 1"
+            );
+            $stmt->bind_param("i", $phase_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $required_docs[] = $row['code'];
+                }
+            }
+            $stmt->close();
+
+            if (empty($required_docs) && $required_doc_type !== '') {
+                $required_docs = [$required_doc_type];
+            }
+
+            $missing_docs = [];
+            foreach ($required_docs as $doc_code) {
+                $stmt = $conn->prepare(
+                    "SELECT COUNT(*) AS cnt
+                     FROM attachments
+                     WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
+                );
+                $stmt->bind_param("is", $phase_id, $doc_code);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $count = 0;
+                if ($result && $result->num_rows === 1) {
+                    $row = $result->fetch_assoc();
+                    $count = (int) $row['cnt'];
+                }
+                $stmt->close();
+                if ($count === 0) {
+                    $missing_docs[] = $doc_code;
+                }
+            }
+
+            if (!empty($required_docs) && !empty($missing_docs)) {
+                $error = "Upload required documents before submitting this phase.";
+            } else {
         $stmt = $conn->prepare(
             "SELECT COUNT(*) AS cnt FROM phase_submissions WHERE phase_id = ? AND status = 'pending'"
         );
@@ -515,38 +560,203 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete']
     if (!$allowed) {
         $error = "You are not allowed to complete this phase.";
     } else {
-        if ($required_doc_type !== '') {
-            $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
-            );
-            $stmt->bind_param("is", $phase_id, $required_doc_type);
-        } else {
-            $stmt = $conn->prepare(
-                "SELECT COUNT(*) AS cnt FROM attachments WHERE phase_id = ? AND is_deleted = 0"
-            );
-            $stmt->bind_param("i", $phase_id);
-        }
+        $dependencies_ok = true;
+        $stmt = $conn->prepare(
+            "SELECT d.depends_on_phase_id, p.completed_at
+             FROM phase_dependencies d
+             JOIN project_phases p ON p.id = d.depends_on_phase_id
+             WHERE d.phase_id = ?"
+        );
+        $stmt->bind_param("i", $phase_id);
         $stmt->execute();
         $result = $stmt->get_result();
-        $doc_count = 0;
-        if ($result && $result->num_rows === 1) {
-            $row = $result->fetch_assoc();
-            $doc_count = (int) $row['cnt'];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                if (empty($row['completed_at'])) {
+                    $dependencies_ok = false;
+                    break;
+                }
+            }
         }
         $stmt->close();
 
-        if ($doc_count === 0) {
-            $error = "Upload required documents before completing this phase.";
+        if (!$dependencies_ok) {
+            $error = "Complete required phases before completing this phase.";
         } else {
+            $required_docs = [];
             $stmt = $conn->prepare(
-                "UPDATE project_phases
-                 SET completed_at = NOW()
-                 WHERE id = ? AND project_id = ?"
+                "SELECT dt.code
+                 FROM phase_required_documents prd
+                 JOIN document_types dt ON dt.id = prd.document_type_id
+                 WHERE prd.phase_id = ? AND prd.is_required = 1 AND dt.is_active = 1"
             );
+            $stmt->bind_param("i", $phase_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $required_docs[] = $row['code'];
+                }
+            }
+            $stmt->close();
+
+            if (empty($required_docs) && $required_doc_type !== '') {
+                $required_docs = [$required_doc_type];
+            }
+
+            $missing_docs = [];
+            foreach ($required_docs as $doc_code) {
+                $stmt = $conn->prepare(
+                    "SELECT COUNT(*) AS cnt
+                     FROM attachments
+                     WHERE phase_id = ? AND doc_type = ? AND is_deleted = 0"
+                );
+                $stmt->bind_param("is", $phase_id, $doc_code);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $count = 0;
+                if ($result && $result->num_rows === 1) {
+                    $row = $result->fetch_assoc();
+                    $count = (int) $row['cnt'];
+                }
+                $stmt->close();
+                if ($count === 0) {
+                    $missing_docs[] = $doc_code;
+                }
+            }
+
+            if (!empty($required_docs) && !empty($missing_docs)) {
+                $error = "Upload required documents before completing this phase.";
+            } else {
+        $stmt = $conn->prepare(
+            "UPDATE project_phases
+             SET completed_at = NOW()
+             WHERE id = ? AND project_id = ?"
+        );
             $stmt->bind_param("ii", $phase_id, $project_id);
             $stmt->execute();
             $stmt->close();
             $success = "Phase marked as complete.";
+        }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_phase_requirement'])) {
+    if (!$is_admin) {
+        $error = "You are not allowed to edit requirements.";
+    } else {
+        $phase_id = (int) ($_POST['req_phase_id'] ?? 0);
+        $document_type_id = (int) ($_POST['req_document_type_id'] ?? 0);
+        if ($phase_id <= 0 || $document_type_id <= 0) {
+            $error = "Phase and document type are required.";
+        } else {
+            $stmt = $conn->prepare(
+                "INSERT INTO phase_required_documents (phase_id, document_type_id, is_required)
+                 VALUES (?, ?, 1)
+                 ON DUPLICATE KEY UPDATE is_required = 1"
+            );
+            $stmt->bind_param("ii", $phase_id, $document_type_id);
+            if ($stmt->execute()) {
+                $success = "Phase requirement added.";
+            } else {
+                $error = "Unable to add requirement.";
+            }
+            $stmt->close();
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_phase_dependency'])) {
+    if (!$is_admin) {
+        $error = "You are not allowed to edit dependencies.";
+    } else {
+        $phase_id = (int) ($_POST['dep_phase_id'] ?? 0);
+        $depends_on = (int) ($_POST['depends_on_phase_id'] ?? 0);
+        if ($phase_id <= 0 || $depends_on <= 0 || $phase_id === $depends_on) {
+            $error = "Select two different phases.";
+        } else {
+            $stmt = $conn->prepare(
+                "INSERT INTO phase_dependencies (phase_id, depends_on_phase_id)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE phase_id = phase_id"
+            );
+            $stmt->bind_param("ii", $phase_id, $depends_on);
+            if ($stmt->execute()) {
+                $success = "Phase dependency added.";
+            } else {
+                $error = "Unable to add dependency.";
+            }
+            $stmt->close();
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
+    if (!$is_admin) {
+        $error = "You are not allowed to generate phases.";
+    } else {
+        $project_type = trim($project['project_type'] ?? '');
+        if ($project_type === '') {
+            $error = "Project type is required to generate phases.";
+        } else {
+            $stmt = $conn->prepare(
+                "SELECT name, owner_role, phase_type, required_doc_type
+                 FROM project_type_phases
+                 WHERE project_type = ?"
+            );
+            $stmt->bind_param("s", $project_type);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $templates = [];
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $templates[] = $row;
+                }
+            }
+            $stmt->close();
+
+            if (empty($templates)) {
+                $error = "No phase templates for this project type.";
+            } else {
+                foreach ($templates as $tpl) {
+                    $stmt = $conn->prepare(
+                        "SELECT COUNT(*) AS cnt
+                         FROM project_phases
+                         WHERE project_id = ? AND name = ?"
+                    );
+                    $stmt->bind_param("is", $project_id, $tpl['name']);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $exists = 0;
+                    if ($result && $result->num_rows === 1) {
+                        $row = $result->fetch_assoc();
+                        $exists = (int) $row['cnt'];
+                    }
+                    $stmt->close();
+                    if ($exists > 0) {
+                        continue;
+                    }
+                    $sequence_order = get_next_phase_sequence($conn, $project_id);
+                    $stmt = $conn->prepare(
+                        "INSERT INTO project_phases
+                         (project_id, name, sequence_order, owner_role, phase_type, required_doc_type)
+                         VALUES (?, ?, ?, ?, ?, ?)"
+                    );
+                    $stmt->bind_param(
+                        "isisss",
+                        $project_id,
+                        $tpl['name'],
+                        $sequence_order,
+                        $tpl['owner_role'],
+                        $tpl['phase_type'],
+                        $tpl['required_doc_type']
+                    );
+                    $stmt->execute();
+                    $stmt->close();
+                }
+                $success = "Phase templates generated.";
+            }
         }
     }
 }
@@ -779,6 +989,32 @@ foreach ($project_documents as $doc) {
     }
 }
 
+$phase_requirements = [];
+$req_result = $conn->query(
+    "SELECT prd.phase_id, dt.label, dt.code
+     FROM phase_required_documents prd
+     JOIN document_types dt ON dt.id = prd.document_type_id
+     WHERE prd.is_required = 1"
+);
+if ($req_result) {
+    while ($row = $req_result->fetch_assoc()) {
+        $phase_requirements[$row['phase_id']][] = $row;
+    }
+}
+
+$phase_dependencies = [];
+$dep_result = $conn->query(
+    "SELECT d.phase_id, d.depends_on_phase_id, p.name AS depends_on_name
+     FROM phase_dependencies d
+     JOIN project_phases p ON p.id = d.depends_on_phase_id
+     WHERE p.project_id = " . (int) $project_id
+);
+if ($dep_result) {
+    while ($row = $dep_result->fetch_assoc()) {
+        $phase_dependencies[$row['phase_id']][] = $row;
+    }
+}
+
 $users = [];
 $user_result = $conn->query("SELECT id, username, role FROM users ORDER BY username ASC");
 if ($user_result) {
@@ -992,6 +1228,11 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                             <h2>Project phases</h2>
                             <p class="muted">Track deadlines and phase status.</p>
                         </div>
+                        <?php if ($is_admin): ?>
+                            <form method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                                <button class="btn btn-secondary" type="submit" name="generate_phases">Generate phases</button>
+                            </form>
+                        <?php endif; ?>
                     </div>
                     <?php if (empty($phases)): ?>
                         <p class="muted">No phases generated yet.</p>
@@ -1048,7 +1289,18 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                                         <td><?php echo htmlspecialchars($row['owner_role']); ?></td>
                                         <td><?php echo htmlspecialchars($row['assignee_name'] ?? ''); ?></td>
                                         <td><?php echo htmlspecialchars($row['phase_type']); ?></td>
-                                        <td><?php echo htmlspecialchars($row['required_doc_type'] ?? ''); ?></td>
+                                        <td>
+                                            <?php if (!empty($phase_requirements[$row['id']])): ?>
+                                                <?php
+                                                $labels = array_map(function ($r) {
+                                                    return $r['label'];
+                                                }, $phase_requirements[$row['id']]);
+                                                echo htmlspecialchars(implode(', ', $labels));
+                                                ?>
+                                            <?php else: ?>
+                                                <?php echo htmlspecialchars($row['required_doc_type'] ?? ''); ?>
+                                            <?php endif; ?>
+                                        </td>
                                         <td>
                                             <?php if (($role ?? '') === 'admin' || ($role ?? '') === 'coordinator'): ?>
                                                 <form class="inline-form" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
@@ -1096,6 +1348,76 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                         </table>
                     <?php endif; ?>
                 </section>
+
+                <?php if ($is_admin): ?>
+                <section class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Phase requirements</h2>
+                            <p class="muted">Require specific document types per phase.</p>
+                        </div>
+                    </div>
+                    <form class="form-grid" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                        <label for="req_phase_id">Phase</label>
+                        <select id="req_phase_id" name="req_phase_id" required>
+                            <option value="">-- Select phase --</option>
+                            <?php foreach ($phases as $row): ?>
+                                <option value="<?php echo (int) $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label for="req_document_type_id">Document type</label>
+                        <select id="req_document_type_id" name="req_document_type_id" required>
+                            <option value="">-- Select type --</option>
+                            <?php foreach ($document_types as $doc_type): ?>
+                                <option value="<?php echo (int) $doc_type['id']; ?>">
+                                    <?php echo htmlspecialchars($doc_type['label']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <div class="actions">
+                            <button class="btn btn-primary" type="submit" name="add_phase_requirement">Add requirement</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Phase dependencies</h2>
+                            <p class="muted">Enforce completion order across phases.</p>
+                        </div>
+                    </div>
+                    <form class="form-grid" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                        <label for="dep_phase_id">Phase</label>
+                        <select id="dep_phase_id" name="dep_phase_id" required>
+                            <option value="">-- Select phase --</option>
+                            <?php foreach ($phases as $row): ?>
+                                <option value="<?php echo (int) $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label for="depends_on_phase_id">Depends on</label>
+                        <select id="depends_on_phase_id" name="depends_on_phase_id" required>
+                            <option value="">-- Select dependency --</option>
+                            <?php foreach ($phases as $row): ?>
+                                <option value="<?php echo (int) $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <div class="actions">
+                            <button class="btn btn-primary" type="submit" name="add_phase_dependency">Add dependency</button>
+                        </div>
+                    </form>
+                </section>
+                <?php endif; ?>
 
                 <?php if ($is_admin): ?>
                 <section class="card">

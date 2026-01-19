@@ -72,6 +72,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_mapping'])) {
     }
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_phase_template'])) {
+    $project_type = trim($_POST['phase_project_type'] ?? '');
+    $project_type = preg_replace('/\s+/', ' ', $project_type);
+    $name = trim($_POST['phase_name'] ?? '');
+    $owner_role = trim($_POST['phase_owner_role'] ?? '');
+    $phase_type = trim($_POST['phase_type'] ?? 'process');
+    $required_doc_type = trim($_POST['phase_required_doc_type'] ?? '');
+
+    if ($project_type === '' || $name === '' || $owner_role === '') {
+        $error = "Project type, phase name, and owner role are required.";
+    } else {
+        $stmt = $conn->prepare(
+            "INSERT INTO project_type_phases (project_type, name, owner_role, phase_type, required_doc_type)
+             VALUES (?, ?, ?, ?, ?)"
+        );
+        $stmt->bind_param("sssss", $project_type, $name, $owner_role, $phase_type, $required_doc_type);
+        if ($stmt->execute()) {
+            $success = "Phase template created.";
+        } else {
+            $error = "Unable to create phase template.";
+        }
+        $stmt->close();
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rename_project_type'])) {
     $old_type = trim($_POST['old_project_type'] ?? '');
     $new_type = trim($_POST['new_project_type'] ?? '');
@@ -213,6 +238,16 @@ if ($result) {
         $mappings[] = $row;
     }
 }
+
+$phase_templates = [];
+$result = $conn->query(
+    "SELECT * FROM project_type_phases ORDER BY project_type ASC, name ASC"
+);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $phase_templates[] = $row;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -347,6 +382,76 @@ if ($result) {
                     <button class="btn btn-primary" type="submit" name="add_mapping">Save requirement</button>
                 </div>
             </form>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Phase templates</h2>
+                <p class="muted">Define default phases per project type.</p>
+            </div>
+            <form class="form-grid" method="POST" action="document_types.php">
+                <label for="phase_project_type">Project type</label>
+                <input id="phase_project_type" type="text" name="phase_project_type" list="project_type_list" required>
+                <datalist id="project_type_list">
+                    <?php foreach ($project_types as $type): ?>
+                        <option value="<?php echo htmlspecialchars($type); ?>"></option>
+                    <?php endforeach; ?>
+                </datalist>
+
+                <label for="phase_name">Phase name</label>
+                <input id="phase_name" type="text" name="phase_name" placeholder="e.g. Schematic" required>
+
+                <label for="phase_owner_role">Owner role</label>
+                <select id="phase_owner_role" name="phase_owner_role" required>
+                    <option value="designer">designer</option>
+                    <option value="firmware">firmware</option>
+                    <option value="tester">tester</option>
+                    <option value="supplier">supplier</option>
+                    <option value="coordinator">coordinator</option>
+                </select>
+
+                <label for="phase_type">Phase type</label>
+                <select id="phase_type" name="phase_type">
+                    <option value="process">process</option>
+                    <option value="document">document</option>
+                    <option value="approval">approval</option>
+                    <option value="test">test</option>
+                </select>
+
+                <label for="phase_required_doc_type">Required doc type (optional)</label>
+                <input id="phase_required_doc_type" type="text" name="phase_required_doc_type" placeholder="e.g. schematic">
+
+                <div class="actions">
+                    <button class="btn btn-primary" type="submit" name="add_phase_template">Add phase template</button>
+                </div>
+            </form>
+
+            <?php if (empty($phase_templates)): ?>
+                <p class="muted">No phase templates yet.</p>
+            <?php else: ?>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Project type</th>
+                            <th>Phase</th>
+                            <th>Owner role</th>
+                            <th>Type</th>
+                            <th>Required doc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($phase_templates as $tpl): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($tpl['project_type']); ?></td>
+                                <td><?php echo htmlspecialchars($tpl['name']); ?></td>
+                                <td><?php echo htmlspecialchars($tpl['owner_role']); ?></td>
+                                <td><?php echo htmlspecialchars($tpl['phase_type']); ?></td>
+                                <td><?php echo htmlspecialchars($tpl['required_doc_type'] ?? ''); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         </section>
 
         <section class="card">

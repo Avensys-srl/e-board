@@ -174,6 +174,53 @@ CREATE TABLE IF NOT EXISTS project_phases (
     ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS phase_required_documents (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  phase_id INT UNSIGNED NOT NULL,
+  document_type_id INT UNSIGNED NOT NULL,
+  is_required TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_phase_required_documents (phase_id, document_type_id),
+  KEY idx_phase_required_documents_phase (phase_id),
+  KEY idx_phase_required_documents_doc (document_type_id),
+  CONSTRAINT fk_phase_required_documents_phase
+    FOREIGN KEY (phase_id) REFERENCES project_phases (id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_phase_required_documents_doc
+    FOREIGN KEY (document_type_id) REFERENCES document_types (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS phase_dependencies (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  phase_id INT UNSIGNED NOT NULL,
+  depends_on_phase_id INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_phase_dependencies (phase_id, depends_on_phase_id),
+  KEY idx_phase_dependencies_phase (phase_id),
+  KEY idx_phase_dependencies_depends (depends_on_phase_id),
+  CONSTRAINT fk_phase_dependencies_phase
+    FOREIGN KEY (phase_id) REFERENCES project_phases (id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_phase_dependencies_depends
+    FOREIGN KEY (depends_on_phase_id) REFERENCES project_phases (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_type_phases (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_type VARCHAR(100) NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  owner_role VARCHAR(50) NOT NULL,
+  phase_type VARCHAR(30) NOT NULL DEFAULT 'process',
+  required_doc_type VARCHAR(50) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_project_type_phases_type (project_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS phase_submissions (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   phase_id INT UNSIGNED NOT NULL,

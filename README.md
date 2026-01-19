@@ -18,12 +18,12 @@ Key features (current)
 ----------------------
 - Authentication and role-based access (admin, designer, firmware, tester, supplier, coordinator)
 - Project creation, overview, and editable metadata (admin)
-- Dynamic requirements and phases generated from project decisions
+- Dynamic phases generated from project types and decisions
 - Phase assignments with due dates and status indicators
-- Phase submissions with required documents
+- Phase submissions with required documents and dependencies
 - Project and phase document uploads
 - Project-based file manager with trash (soft delete), hard delete for admin only
-- Document types managed by admin and required by project type
+- Document types managed by admin and required per phase
 - Notifications (project-level and user-level) with read/unread status
 - Workflow transitions for project states with history
 - Admin settings for upload base path/URL
@@ -63,7 +63,7 @@ Main pages
 
 Notes
 -----
-- Workflow is dynamic: phases and requirements are generated from decisions.
+- Workflow is dynamic: phases and requirements are generated from project types and decisions.
 - Mandatory requirements block approvals until resolved.
 - Phase submissions require documents before they can be sent.
-- Project types drive required document sets.
+- Project types drive default phase templates.

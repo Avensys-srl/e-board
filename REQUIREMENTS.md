@@ -76,9 +76,14 @@ Phases belong to a project and have:
 - optional assignee
 - due date
 - completion status
-- required documents (when applicable)
+- required document types
+- dependencies on other phases
 
-Phase submission requires required documents to be uploaded first.
+Rules:
+- A phase can be submitted or completed only if:
+  - all required document types are present
+  - all dependent phases are completed
+- Phases can run in parallel; dependencies can enforce sequencing.
 
 9. Document management (project-based)
 --------------------------------------
@@ -92,35 +97,43 @@ File manager must be project-based and include a Trash:
 - files are never auto-deleted
 - only Admin can permanently delete
 
-10. Document types and requirements
------------------------------------
-Document types are managed by Admin (standard list).
-Each project type can define required document types.
+10. Project types and phase templates
+-------------------------------------
+Project types are managed by Admin.
+Each project type defines default phase templates (name, role, type).
 Rules:
 - Project type can be edited/renamed by Admin.
 - Project type can be deleted only if not used by any project.
-- Required documents for a type cannot be removed if the type is in use.
+- Phase templates can be added to new projects of that type.
 
-11. Versioning
+11. Document types and requirements
+-----------------------------------
+Document types are managed by Admin (standard list).
+Document requirements are attached to specific phases.
+Rules:
+- Required document types cannot be removed for an active project type.
+- Phase completion is blocked until required document types are present.
+
+12. Versioning
 --------------
 Internal versioning is required:
 - project_versions (label, parent, description, created_by, is_current)
 - firmware_versions (label, description, checksum)
 Documents can be linked to versions for traceability.
 
-12. Traceability
+13. Traceability
 ----------------
 System must track:
 - who did what and when
 - which documents support decisions
 - approval history and state transitions
 
-13. Exclusions
+14. Exclusions
 --------------
 Do NOT implement electronics logic or real-life examples as software rules.
 Examples are illustrative only.
 
-14. Goal
+15. Goal
 --------
 Provide a clean, extensible project management platform with enforced
 constraints, approvals, and full traceability.
