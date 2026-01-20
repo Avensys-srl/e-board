@@ -75,25 +75,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_mapping'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_phase_template'])) {
-    $project_type = trim($_POST['phase_project_type'] ?? '');
-    $project_type = preg_replace('/\s+/', ' ', $project_type);
     $name = trim($_POST['phase_name'] ?? '');
     $owner_role = trim($_POST['phase_owner_role'] ?? '');
     $phase_type = trim($_POST['phase_type'] ?? 'process');
     $required_doc_type = trim($_POST['phase_required_doc_type'] ?? '');
 
-    if ($project_type === '' || $name === '' || $owner_role === '') {
-        $error = "Project type, phase name, and owner role are required.";
+    if ($name === '' || $owner_role === '') {
+        $error = "Phase name and owner role are required.";
     } else {
+        if ($required_doc_type !== '') {
+            $stmt = $conn->prepare(
+                "SELECT id FROM document_types WHERE code = ? AND is_active = 1 LIMIT 1"
+            );
+            $stmt->bind_param("s", $required_doc_type);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $valid_doc = ($result && $result->num_rows === 1);
+            $stmt->close();
+            if (!$valid_doc) {
+                $error = "Required document type must be an active document type.";
+            }
+        }
+    }
+
+    if ($error === '') {
         $stmt = $conn->prepare(
-            "INSERT INTO project_type_phases (project_type, name, owner_role, phase_type, required_doc_type)
-             VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO phase_templates (name, owner_role, phase_type, required_doc_type)
+             VALUES (?, ?, ?, ?)"
         );
-        $stmt->bind_param("sssss", $project_type, $name, $owner_role, $phase_type, $required_doc_type);
+        $stmt->bind_param("ssss", $name, $owner_role, $phase_type, $required_doc_type);
         if ($stmt->execute()) {
             $success = "Phase template created.";
         } else {
             $error = "Unable to create phase template.";
+        }
+        $stmt->close();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_project_phase'])) {
+    $project_type = trim($_POST['setup_project_type_custom'] ?? '');
+    $project_type = preg_replace('/\s+/', ' ', $project_type);
+    if ($project_type === '') {
+        $project_type = trim($_POST['setup_project_type_select'] ?? '');
+        $project_type = preg_replace('/\s+/', ' ', $project_type);
+    }
+    $phase_template_id = (int) ($_POST['phase_template_id'] ?? 0);
+    $sequence_order = (int) ($_POST['sequence_order'] ?? 0);
+    $is_mandatory = isset($_POST['is_mandatory']) ? 1 : 0;
+
+    if ($project_type === '' || $phase_template_id <= 0 || $sequence_order <= 0) {
+        $error = "Project type, phase template, and sequence are required.";
+    } else {
+        $stmt = $conn->prepare(
+            "INSERT INTO project_type_phase_templates (project_type, phase_template_id, sequence_order, is_mandatory)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE sequence_order = VALUES(sequence_order), is_mandatory = VALUES(is_mandatory)"
+        );
+        $stmt->bind_param("siii", $project_type, $phase_template_id, $sequence_order, $is_mandatory);
+        if ($stmt->execute()) {
+            $success = "Phase added to project template.";
+        } else {
+            $error = "Unable to add phase to project template.";
+        }
+        $stmt->close();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_project_phase_doc'])) {
+    $project_type = trim($_POST['req_project_type_custom'] ?? '');
+    $project_type = preg_replace('/\s+/', ' ', $project_type);
+    if ($project_type === '') {
+        $project_type = trim($_POST['req_project_type_select'] ?? '');
+        $project_type = preg_replace('/\s+/', ' ', $project_type);
+    }
+    $phase_template_id = (int) ($_POST['req_phase_template_id'] ?? 0);
+    $document_type_id = (int) ($_POST['req_document_type_id'] ?? 0);
+    $is_required = isset($_POST['req_is_required']) ? 1 : 0;
+
+    if ($project_type === '' || $phase_template_id <= 0 || $document_type_id <= 0) {
+        $error = "Project type, phase template, and document type are required.";
+    } else {
+        $stmt = $conn->prepare(
+            "INSERT INTO project_type_phase_documents (project_type, phase_template_id, document_type_id, is_required)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_required = VALUES(is_required)"
+        );
+        $stmt->bind_param("siii", $project_type, $phase_template_id, $document_type_id, $is_required);
+        if ($stmt->execute()) {
+            $success = "Phase document requirement saved.";
+        } else {
+            $error = "Unable to save phase document requirement.";
+        }
+        $stmt->close();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_project_phase_dependency'])) {
+    $project_type = trim($_POST['dep_project_type_custom'] ?? '');
+    $project_type = preg_replace('/\s+/', ' ', $project_type);
+    if ($project_type === '') {
+        $project_type = trim($_POST['dep_project_type_select'] ?? '');
+        $project_type = preg_replace('/\s+/', ' ', $project_type);
+    }
+    $phase_template_id = (int) ($_POST['dep_phase_template_id'] ?? 0);
+    $depends_on_template_id = (int) ($_POST['depends_on_template_id'] ?? 0);
+
+    if ($project_type === '' || $phase_template_id <= 0 || $depends_on_template_id <= 0) {
+        $error = "Project type and two phases are required.";
+    } elseif ($phase_template_id === $depends_on_template_id) {
+        $error = "Select two different phases.";
+    } else {
+        $stmt = $conn->prepare(
+            "INSERT INTO project_type_phase_dependencies (project_type, phase_template_id, depends_on_template_id)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE phase_template_id = phase_template_id"
+        );
+        $stmt->bind_param("sii", $project_type, $phase_template_id, $depends_on_template_id);
+        if ($stmt->execute()) {
+            $success = "Phase dependency added.";
+        } else {
+            $error = "Unable to add phase dependency.";
         }
         $stmt->close();
     }
@@ -118,7 +220,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rename_project_type']
             $stmt->execute();
             $stmt->close();
 
-            $stmt = $conn->prepare("UPDATE project_type_phases SET project_type = ? WHERE project_type = ?");
+            $stmt = $conn->prepare("UPDATE project_type_phase_templates SET project_type = ? WHERE project_type = ?");
+            $stmt->bind_param("ss", $new_type, $old_type);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("UPDATE project_type_phase_documents SET project_type = ? WHERE project_type = ?");
+            $stmt->bind_param("ss", $new_type, $old_type);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("UPDATE project_type_phase_dependencies SET project_type = ? WHERE project_type = ?");
             $stmt->bind_param("ss", $new_type, $old_type);
             $stmt->execute();
             $stmt->close();
@@ -155,7 +267,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_project_type']
             $stmt->bind_param("s", $project_type);
             $stmt->execute();
             $stmt->close();
-            $stmt = $conn->prepare("DELETE FROM project_type_phases WHERE project_type = ?");
+            $stmt = $conn->prepare("DELETE FROM project_type_phase_templates WHERE project_type = ?");
+            $stmt->bind_param("s", $project_type);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("DELETE FROM project_type_phase_documents WHERE project_type = ?");
+            $stmt->bind_param("s", $project_type);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("DELETE FROM project_type_phase_dependencies WHERE project_type = ?");
             $stmt->bind_param("s", $project_type);
             $stmt->execute();
             $stmt->close();
@@ -207,7 +329,11 @@ $result = $conn->query(
      UNION
      SELECT DISTINCT project_type FROM project_type_documents
      UNION
-     SELECT DISTINCT project_type FROM project_type_phases
+     SELECT DISTINCT project_type FROM project_type_phase_templates
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_documents
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_dependencies
      ORDER BY project_type ASC"
 );
 if ($result) {
@@ -238,6 +364,16 @@ if ($result) {
         $project_type_stats[$row['project_type']]['requirements'] = (int) $row['cnt'];
     }
 }
+$result = $conn->query(
+    "SELECT project_type, COUNT(*) AS cnt
+     FROM project_type_phase_templates
+     GROUP BY project_type"
+);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $project_type_stats[$row['project_type']]['phases'] = (int) $row['cnt'];
+    }
+}
 
 $mappings = [];
 $result = $conn->query(
@@ -254,11 +390,52 @@ if ($result) {
 
 $phase_templates = [];
 $result = $conn->query(
-    "SELECT * FROM project_type_phases ORDER BY project_type ASC, name ASC"
+    "SELECT * FROM phase_templates ORDER BY name ASC"
 );
 if ($result) {
     while ($row = $result->fetch_assoc()) {
         $phase_templates[] = $row;
+    }
+}
+
+$project_type_phase_templates = [];
+$result = $conn->query(
+    "SELECT ppt.*, pt.name AS phase_name, pt.owner_role, pt.phase_type
+     FROM project_type_phase_templates ppt
+     JOIN phase_templates pt ON pt.id = ppt.phase_template_id
+     ORDER BY ppt.project_type ASC, ppt.sequence_order ASC"
+);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $project_type_phase_templates[] = $row;
+    }
+}
+
+$project_type_phase_documents = [];
+$result = $conn->query(
+    "SELECT ptd.*, pt.name AS phase_name, dt.label AS doc_label
+     FROM project_type_phase_documents ptd
+     JOIN phase_templates pt ON pt.id = ptd.phase_template_id
+     JOIN document_types dt ON dt.id = ptd.document_type_id
+     ORDER BY ptd.project_type ASC, pt.name ASC, dt.label ASC"
+);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $project_type_phase_documents[] = $row;
+    }
+}
+
+$project_type_phase_dependencies = [];
+$result = $conn->query(
+    "SELECT ptd.*, pt.name AS phase_name, dep.name AS depends_on_name
+     FROM project_type_phase_dependencies ptd
+     JOIN phase_templates pt ON pt.id = ptd.phase_template_id
+     JOIN phase_templates dep ON dep.id = ptd.depends_on_template_id
+     ORDER BY ptd.project_type ASC, pt.name ASC"
+);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $project_type_phase_dependencies[] = $row;
     }
 }
 ?>
@@ -373,8 +550,8 @@ if ($result) {
         <?php if ($view === 'projects'): ?>
             <section class="card">
                 <div class="card-header">
-                    <h2>Project type requirements</h2>
-                    <p class="muted">Assign required document types per project type.</p>
+                    <h2>Project-level documents</h2>
+                    <p class="muted">Documents required at the project level (not tied to a specific phase).</p>
                 </div>
                 <form class="form-grid" method="POST" action="project_config.php?view=projects">
                     <label for="project_type_select">Project type</label>
@@ -411,7 +588,7 @@ if ($result) {
 
             <section class="card">
                 <div class="card-header">
-                    <h2>Current requirements</h2>
+                    <h2>Project-level document requirements</h2>
                 </div>
                 <?php if (empty($mappings)): ?>
                     <p class="muted">No requirements configured.</p>
@@ -454,6 +631,217 @@ if ($result) {
 
             <section class="card">
                 <div class="card-header">
+                    <h2>Project type phases</h2>
+                    <p class="muted">Attach phase templates to project types.</p>
+                </div>
+                <form class="form-grid" method="POST" action="project_config.php?view=projects">
+                    <label for="setup_project_type_select">Project type</label>
+                    <select id="setup_project_type_select" name="setup_project_type_select">
+                        <option value="">-- Select project type --</option>
+                        <?php foreach ($project_types as $type): ?>
+                            <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="setup_project_type_custom">Or add new project type</label>
+                    <input id="setup_project_type_custom" type="text" name="setup_project_type_custom" placeholder="e.g. Control Board">
+
+                    <label for="phase_template_id">Phase template</label>
+                    <select id="phase_template_id" name="phase_template_id" required>
+                        <option value="">-- Select phase template --</option>
+                        <?php foreach ($phase_templates as $tpl): ?>
+                            <option value="<?php echo (int) $tpl['id']; ?>">
+                                <?php echo htmlspecialchars($tpl['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="sequence_order">Sequence order</label>
+                    <input id="sequence_order" type="number" name="sequence_order" min="1" step="1" required>
+
+                    <label class="delete-option">
+                        <input type="checkbox" name="is_mandatory" checked>
+                        <span>Mandatory</span>
+                    </label>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit" name="add_project_phase">Add phase</button>
+                    </div>
+                </form>
+
+                <?php if (empty($project_type_phase_templates)): ?>
+                    <p class="muted">No phase templates assigned yet.</p>
+                <?php else: ?>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Project type</th>
+                                <th>Phase</th>
+                                <th>Owner role</th>
+                                <th>Type</th>
+                                <th>Sequence</th>
+                                <th>Mandatory</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($project_type_phase_templates as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($row['project_type']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['phase_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['owner_role']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['phase_type']); ?></td>
+                                    <td><?php echo (int) $row['sequence_order']; ?></td>
+                                    <td><?php echo $row['is_mandatory'] ? 'Yes' : 'No'; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>Phase document requirements</h2>
+                    <p class="muted">Define which documents unlock a phase in a project type.</p>
+                </div>
+                <form class="form-grid" method="POST" action="project_config.php?view=projects">
+                    <label for="req_project_type_select">Project type</label>
+                    <select id="req_project_type_select" name="req_project_type_select">
+                        <option value="">-- Select project type --</option>
+                        <?php foreach ($project_types as $type): ?>
+                            <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="req_project_type_custom">Or add new project type</label>
+                    <input id="req_project_type_custom" type="text" name="req_project_type_custom" placeholder="e.g. Control Board">
+
+                    <label for="req_phase_template_id">Phase template</label>
+                    <select id="req_phase_template_id" name="req_phase_template_id" required>
+                        <option value="">-- Select phase template --</option>
+                        <?php foreach ($phase_templates as $tpl): ?>
+                            <option value="<?php echo (int) $tpl['id']; ?>">
+                                <?php echo htmlspecialchars($tpl['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="req_document_type_id">Document type</label>
+                    <select id="req_document_type_id" name="req_document_type_id" required>
+                        <option value="">-- Select document type --</option>
+                        <?php foreach ($document_types as $doc): ?>
+                            <?php if ((int) ($doc['is_active'] ?? 0) === 1): ?>
+                                <option value="<?php echo (int) $doc['id']; ?>">
+                                    <?php echo htmlspecialchars($doc['label']); ?>
+                                </option>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label class="delete-option">
+                        <input type="checkbox" name="req_is_required" checked>
+                        <span>Required</span>
+                    </label>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit" name="add_project_phase_doc">Save requirement</button>
+                    </div>
+                </form>
+
+                <?php if (empty($project_type_phase_documents)): ?>
+                    <p class="muted">No phase document requirements yet.</p>
+                <?php else: ?>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Project type</th>
+                                <th>Phase</th>
+                                <th>Document type</th>
+                                <th>Required</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($project_type_phase_documents as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($row['project_type']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['phase_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['doc_label']); ?></td>
+                                    <td><?php echo $row['is_required'] ? 'Yes' : 'No'; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>Phase dependencies</h2>
+                    <p class="muted">Define which phases must be completed first.</p>
+                </div>
+                <form class="form-grid" method="POST" action="project_config.php?view=projects">
+                    <label for="dep_project_type_select">Project type</label>
+                    <select id="dep_project_type_select" name="dep_project_type_select">
+                        <option value="">-- Select project type --</option>
+                        <?php foreach ($project_types as $type): ?>
+                            <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="dep_project_type_custom">Or add new project type</label>
+                    <input id="dep_project_type_custom" type="text" name="dep_project_type_custom" placeholder="e.g. Control Board">
+
+                    <label for="dep_phase_template_id">Phase template</label>
+                    <select id="dep_phase_template_id" name="dep_phase_template_id" required>
+                        <option value="">-- Select phase template --</option>
+                        <?php foreach ($phase_templates as $tpl): ?>
+                            <option value="<?php echo (int) $tpl['id']; ?>">
+                                <?php echo htmlspecialchars($tpl['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <label for="depends_on_template_id">Depends on</label>
+                    <select id="depends_on_template_id" name="depends_on_template_id" required>
+                        <option value="">-- Select dependency --</option>
+                        <?php foreach ($phase_templates as $tpl): ?>
+                            <option value="<?php echo (int) $tpl['id']; ?>">
+                                <?php echo htmlspecialchars($tpl['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit" name="add_project_phase_dependency">Add dependency</button>
+                    </div>
+                </form>
+
+                <?php if (empty($project_type_phase_dependencies)): ?>
+                    <p class="muted">No phase dependencies yet.</p>
+                <?php else: ?>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Project type</th>
+                                <th>Phase</th>
+                                <th>Depends on</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($project_type_phase_dependencies as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($row['project_type']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['phase_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['depends_on_name']); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
                     <h2>Project types</h2>
                     <p class="muted">Rename or remove project types that are not in use.</p>
                 </div>
@@ -466,6 +854,7 @@ if ($result) {
                                 <th>Project type</th>
                                 <th>Projects</th>
                                 <th>Requirements</th>
+                                <th>Phases</th>
                                 <th>Rename</th>
                                 <th>Delete</th>
                             </tr>
@@ -475,11 +864,13 @@ if ($result) {
                                 <?php
                                 $projects_count = $project_type_stats[$type]['projects'] ?? 0;
                                 $requirements_count = $project_type_stats[$type]['requirements'] ?? 0;
+                                $phases_count = $project_type_stats[$type]['phases'] ?? 0;
                                 ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($type); ?></td>
                                     <td><?php echo (int) $projects_count; ?></td>
                                     <td><?php echo (int) $requirements_count; ?></td>
+                                    <td><?php echo (int) $phases_count; ?></td>
                                     <td>
                                         <form class="inline-form" method="POST" action="project_config.php?view=projects">
                                             <input type="hidden" name="old_project_type" value="<?php echo htmlspecialchars($type); ?>">
@@ -509,17 +900,9 @@ if ($result) {
             <section class="card">
                 <div class="card-header">
                     <h2>Phase templates</h2>
-                    <p class="muted">Define default phases per project type.</p>
+                    <p class="muted">Define reusable phase templates.</p>
                 </div>
                 <form class="form-grid" method="POST" action="project_config.php?view=phases">
-                    <label for="phase_project_type">Project type</label>
-                    <input id="phase_project_type" type="text" name="phase_project_type" list="project_type_list" required>
-                    <datalist id="project_type_list">
-                        <?php foreach ($project_types as $type): ?>
-                            <option value="<?php echo htmlspecialchars($type); ?>"></option>
-                        <?php endforeach; ?>
-                    </datalist>
-
                     <label for="phase_name">Phase name</label>
                     <input id="phase_name" type="text" name="phase_name" placeholder="e.g. Schematic" required>
 
@@ -541,7 +924,16 @@ if ($result) {
                     </select>
 
                     <label for="phase_required_doc_type">Required doc type (optional)</label>
-                    <input id="phase_required_doc_type" type="text" name="phase_required_doc_type" placeholder="e.g. schematic">
+                    <select id="phase_required_doc_type" name="phase_required_doc_type">
+                        <option value="">-- None --</option>
+                        <?php foreach ($document_types as $doc): ?>
+                            <?php if ((int) ($doc['is_active'] ?? 0) === 1): ?>
+                                <option value="<?php echo htmlspecialchars($doc['code']); ?>">
+                                    <?php echo htmlspecialchars($doc['label']); ?>
+                                </option>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </select>
 
                     <div class="actions">
                         <button class="btn btn-primary" type="submit" name="add_phase_template">Add phase template</button>
@@ -554,7 +946,6 @@ if ($result) {
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Project type</th>
                                 <th>Phase</th>
                                 <th>Owner role</th>
                                 <th>Type</th>
@@ -564,7 +955,6 @@ if ($result) {
                         <tbody>
                             <?php foreach ($phase_templates as $tpl): ?>
                                 <tr>
-                                    <td><?php echo htmlspecialchars($tpl['project_type']); ?></td>
                                     <td><?php echo htmlspecialchars($tpl['name']); ?></td>
                                     <td><?php echo htmlspecialchars($tpl['owner_role']); ?></td>
                                     <td><?php echo htmlspecialchars($tpl['phase_type']); ?></td>

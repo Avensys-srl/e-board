@@ -204,7 +204,11 @@ $type_result = $conn->query(
      UNION
      SELECT DISTINCT project_type FROM project_type_documents
      UNION
-     SELECT DISTINCT project_type FROM project_type_phases
+     SELECT DISTINCT project_type FROM project_type_phase_templates
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_documents
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_dependencies
      ORDER BY project_type ASC"
 );
 if ($type_result) {

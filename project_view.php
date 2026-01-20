@@ -112,6 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
                     $success = "Project updated.";
                     $project_code = $code;
                     $project_version = (string) $version;
+                    $project_type_for_requirements = $project_type;
                 } else {
                     $error = "Unable to update project. " . $stmt->error;
                 }
@@ -686,14 +687,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
     if (!$is_admin) {
         $error = "You are not allowed to generate phases.";
     } else {
-        $project_type = trim($project['project_type'] ?? '');
+        $project_type = trim($project_type_for_requirements ?? '');
         if ($project_type === '') {
             $error = "Project type is required to generate phases.";
         } else {
             $stmt = $conn->prepare(
-                "SELECT name, owner_role, phase_type, required_doc_type
-                 FROM project_type_phases
-                 WHERE project_type = ?"
+                "SELECT ppt.phase_template_id, ppt.sequence_order, ppt.is_mandatory,
+                        pt.name, pt.owner_role, pt.phase_type, pt.required_doc_type
+                 FROM project_type_phase_templates ppt
+                 JOIN phase_templates pt ON pt.id = ppt.phase_template_id
+                 WHERE ppt.project_type = ?
+                 ORDER BY ppt.sequence_order ASC, pt.name ASC"
             );
             $stmt->bind_param("s", $project_type);
             $stmt->execute();
@@ -709,13 +713,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
             if (empty($templates)) {
                 $error = "No phase templates for this project type.";
             } else {
+                $phase_map = [];
+                $existing_stmt = $conn->prepare(
+                    "SELECT phase_template_id, id
+                     FROM project_phases
+                     WHERE project_id = ? AND phase_template_id IS NOT NULL"
+                );
+                $existing_stmt->bind_param("i", $project_id);
+                $existing_stmt->execute();
+                $existing_result = $existing_stmt->get_result();
+                if ($existing_result) {
+                    while ($row = $existing_result->fetch_assoc()) {
+                        $phase_map[(int) $row['phase_template_id']] = (int) $row['id'];
+                    }
+                }
+                $existing_stmt->close();
                 foreach ($templates as $tpl) {
                     $stmt = $conn->prepare(
                         "SELECT COUNT(*) AS cnt
                          FROM project_phases
-                         WHERE project_id = ? AND name = ?"
+                         WHERE project_id = ? AND phase_template_id = ?"
                     );
-                    $stmt->bind_param("is", $project_id, $tpl['name']);
+                    $stmt->bind_param("ii", $project_id, $tpl['phase_template_id']);
                     $stmt->execute();
                     $result = $stmt->get_result();
                     $exists = 0;
@@ -727,22 +746,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
                     if ($exists > 0) {
                         continue;
                     }
-                    $sequence_order = get_next_phase_sequence($conn, $project_id);
+                    $sequence_order = (int) $tpl['sequence_order'];
+                    $stmt = $conn->prepare(
+                        "SELECT COUNT(*) AS cnt FROM project_phases WHERE project_id = ? AND sequence_order = ?"
+                    );
+                    $stmt->bind_param("ii", $project_id, $sequence_order);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $sequence_in_use = 0;
+                    if ($result && $result->num_rows === 1) {
+                        $row = $result->fetch_assoc();
+                        $sequence_in_use = (int) $row['cnt'];
+                    }
+                    $stmt->close();
+                    if ($sequence_in_use > 0) {
+                        $sequence_order = get_next_phase_sequence($conn, $project_id);
+                    }
                     $stmt = $conn->prepare(
                         "INSERT INTO project_phases
-                         (project_id, name, sequence_order, owner_role, phase_type, required_doc_type)
-                         VALUES (?, ?, ?, ?, ?, ?)"
+                         (project_id, phase_template_id, name, sequence_order, owner_role, phase_type, required_doc_type, is_mandatory)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                     );
                     $stmt->bind_param(
-                        "isisss",
+                        "iisisisi",
                         $project_id,
+                        $tpl['phase_template_id'],
                         $tpl['name'],
                         $sequence_order,
                         $tpl['owner_role'],
                         $tpl['phase_type'],
-                        $tpl['required_doc_type']
+                        $tpl['required_doc_type'],
+                        $tpl['is_mandatory']
                     );
                     $stmt->execute();
+                    $new_phase_id = (int) $stmt->insert_id;
+                    $stmt->close();
+                    if ($new_phase_id > 0) {
+                        $phase_map[(int) $tpl['phase_template_id']] = $new_phase_id;
+                    }
+                }
+                if (!empty($phase_map)) {
+                    $stmt = $conn->prepare(
+                        "SELECT phase_template_id, document_type_id, is_required
+                         FROM project_type_phase_documents
+                         WHERE project_type = ?"
+                    );
+                    $stmt->bind_param("s", $project_type);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    if ($result) {
+                        while ($row = $result->fetch_assoc()) {
+                            $template_id = (int) $row['phase_template_id'];
+                            if (!isset($phase_map[$template_id])) {
+                                continue;
+                            }
+                            $phase_id = $phase_map[$template_id];
+                            $insert = $conn->prepare(
+                                "INSERT INTO phase_required_documents (phase_id, document_type_id, is_required)
+                                 VALUES (?, ?, ?)
+                                 ON DUPLICATE KEY UPDATE is_required = VALUES(is_required)"
+                            );
+                            $insert->bind_param("iii", $phase_id, $row['document_type_id'], $row['is_required']);
+                            $insert->execute();
+                            $insert->close();
+                        }
+                    }
+                    $stmt->close();
+
+                    $stmt = $conn->prepare(
+                        "SELECT phase_template_id, depends_on_template_id
+                         FROM project_type_phase_dependencies
+                         WHERE project_type = ?"
+                    );
+                    $stmt->bind_param("s", $project_type);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    if ($result) {
+                        while ($row = $result->fetch_assoc()) {
+                            $phase_template_id = (int) $row['phase_template_id'];
+                            $depends_on_template_id = (int) $row['depends_on_template_id'];
+                            if (!isset($phase_map[$phase_template_id]) || !isset($phase_map[$depends_on_template_id])) {
+                                continue;
+                            }
+                            $phase_id = $phase_map[$phase_template_id];
+                            $depends_id = $phase_map[$depends_on_template_id];
+                            $insert = $conn->prepare(
+                                "INSERT INTO phase_dependencies (phase_id, depends_on_phase_id)
+                                 VALUES (?, ?)
+                                 ON DUPLICATE KEY UPDATE phase_id = phase_id"
+                            );
+                            $insert->bind_param("ii", $phase_id, $depends_id);
+                            $insert->execute();
+                            $insert->close();
+                        }
+                    }
                     $stmt->close();
                 }
                 $success = "Phase templates generated.";
@@ -917,7 +1014,11 @@ $type_result = $conn->query(
      UNION
      SELECT DISTINCT project_type FROM project_type_documents
      UNION
-     SELECT DISTINCT project_type FROM project_type_phases
+     SELECT DISTINCT project_type FROM project_type_phase_templates
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_documents
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phase_dependencies
      ORDER BY project_type ASC"
 );
 if ($type_result) {
