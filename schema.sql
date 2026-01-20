@@ -153,10 +153,27 @@ CREATE TABLE IF NOT EXISTS phase_templates (
   name VARCHAR(150) NOT NULL,
   owner_role VARCHAR(50) NOT NULL,
   phase_type VARCHAR(30) NOT NULL DEFAULT 'process',
-  required_doc_type VARCHAR(50) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_phase_templates_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS phase_template_documents (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  phase_template_id INT UNSIGNED NOT NULL,
+  document_type_id INT UNSIGNED NOT NULL,
+  is_required TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_phase_template_documents (phase_template_id, document_type_id),
+  KEY idx_phase_template_documents_template (phase_template_id),
+  KEY idx_phase_template_documents_doc (document_type_id),
+  CONSTRAINT fk_phase_template_documents_template
+    FOREIGN KEY (phase_template_id) REFERENCES phase_templates (id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_phase_template_documents_doc
+    FOREIGN KEY (document_type_id) REFERENCES document_types (id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS project_type_phase_templates (
@@ -172,26 +189,6 @@ CREATE TABLE IF NOT EXISTS project_type_phase_templates (
   KEY idx_project_type_phase_templates_template (phase_template_id),
   CONSTRAINT fk_project_type_phase_templates_template
     FOREIGN KEY (phase_template_id) REFERENCES phase_templates (id)
-    ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS project_type_phase_documents (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  project_type VARCHAR(100) NOT NULL,
-  phase_template_id INT UNSIGNED NOT NULL,
-  document_type_id INT UNSIGNED NOT NULL,
-  is_required TINYINT(1) NOT NULL DEFAULT 1,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_project_type_phase_documents (project_type, phase_template_id, document_type_id),
-  KEY idx_project_type_phase_documents_type (project_type),
-  KEY idx_project_type_phase_documents_template (phase_template_id),
-  KEY idx_project_type_phase_documents_doc (document_type_id),
-  CONSTRAINT fk_project_type_phase_documents_template
-    FOREIGN KEY (phase_template_id) REFERENCES phase_templates (id)
-    ON DELETE CASCADE,
-  CONSTRAINT fk_project_type_phase_documents_doc
-    FOREIGN KEY (document_type_id) REFERENCES document_types (id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

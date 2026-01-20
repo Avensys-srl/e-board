@@ -225,10 +225,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     $note = trim($_POST['submission_note'] ?? '');
     $allowed = false;
     $phase_owner_role = '';
-    $required_doc_type = '';
 
     $stmt = $conn->prepare(
-        "SELECT owner_role, required_doc_type FROM project_phases WHERE id = ? AND project_id = ?"
+        "SELECT owner_role FROM project_phases WHERE id = ? AND project_id = ?"
     );
     $stmt->bind_param("ii", $phase_id, $project_id);
     $stmt->execute();
@@ -236,7 +235,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
     if ($result && $result->num_rows === 1) {
         $row = $result->fetch_assoc();
         $phase_owner_role = $row['owner_role'];
-        $required_doc_type = $row['required_doc_type'] ?? '';
     }
     $stmt->close();
 
@@ -287,10 +285,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_phase'])) {
                 }
             }
             $stmt->close();
-
-            if (empty($required_docs) && $required_doc_type !== '') {
-                $required_docs = [$required_doc_type];
-            }
 
             $missing_docs = [];
             foreach ($required_docs as $doc_code) {
@@ -525,10 +519,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete']
     $phase_id = (int) ($_POST['phase_id'] ?? 0);
     $role = $_SESSION['role'] ?? '';
     $allowed = false;
-    $required_doc_type = '';
 
     $stmt = $conn->prepare(
-        "SELECT owner_role, assignee_id, required_doc_type
+        "SELECT owner_role, assignee_id
          FROM project_phases
          WHERE id = ? AND project_id = ?"
     );
@@ -537,7 +530,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete']
     $result = $stmt->get_result();
     if ($result && $result->num_rows === 1) {
         $row = $result->fetch_assoc();
-        $required_doc_type = $row['required_doc_type'] ?? '';
         if ($role === 'admin' || $role === 'coordinator') {
             $allowed = true;
         } elseif (!empty($row['assignee_id']) && (int) $row['assignee_id'] === $user_id) {
@@ -590,10 +582,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_phase_complete']
                 }
             }
             $stmt->close();
-
-            if (empty($required_docs) && $required_doc_type !== '') {
-                $required_docs = [$required_doc_type];
-            }
 
             $missing_docs = [];
             foreach ($required_docs as $doc_code) {
@@ -693,7 +681,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
         } else {
             $stmt = $conn->prepare(
                 "SELECT ppt.phase_template_id, ppt.sequence_order, ppt.is_mandatory,
-                        pt.name, pt.owner_role, pt.phase_type, pt.required_doc_type
+                        pt.name, pt.owner_role, pt.phase_type
                  FROM project_type_phase_templates ppt
                  JOIN phase_templates pt ON pt.id = ppt.phase_template_id
                  WHERE ppt.project_type = ?
@@ -764,18 +752,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
                     }
                     $stmt = $conn->prepare(
                         "INSERT INTO project_phases
-                         (project_id, phase_template_id, name, sequence_order, owner_role, phase_type, required_doc_type, is_mandatory)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                         (project_id, phase_template_id, name, sequence_order, owner_role, phase_type, is_mandatory)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)"
                     );
                     $stmt->bind_param(
-                        "iisisisi",
+                        "iisissi",
                         $project_id,
                         $tpl['phase_template_id'],
                         $tpl['name'],
                         $sequence_order,
                         $tpl['owner_role'],
                         $tpl['phase_type'],
-                        $tpl['required_doc_type'],
                         $tpl['is_mandatory']
                     );
                     $stmt->execute();
@@ -786,32 +773,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_phases'])) {
                     }
                 }
                 if (!empty($phase_map)) {
-                    $stmt = $conn->prepare(
-                        "SELECT phase_template_id, document_type_id, is_required
-                         FROM project_type_phase_documents
-                         WHERE project_type = ?"
-                    );
-                    $stmt->bind_param("s", $project_type);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                    if ($result) {
-                        while ($row = $result->fetch_assoc()) {
-                            $template_id = (int) $row['phase_template_id'];
-                            if (!isset($phase_map[$template_id])) {
-                                continue;
+                    $template_ids = array_keys($phase_map);
+                    if (!empty($template_ids)) {
+                        $placeholders = implode(',', array_fill(0, count($template_ids), '?'));
+                        $types = str_repeat('i', count($template_ids));
+                        $sql = "SELECT phase_template_id, document_type_id, is_required
+                                FROM phase_template_documents
+                                WHERE phase_template_id IN ($placeholders)";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bind_param($types, ...$template_ids);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        if ($result) {
+                            while ($row = $result->fetch_assoc()) {
+                                $template_id = (int) $row['phase_template_id'];
+                                if (!isset($phase_map[$template_id])) {
+                                    continue;
+                                }
+                                $phase_id = $phase_map[$template_id];
+                                $insert = $conn->prepare(
+                                    "INSERT INTO phase_required_documents (phase_id, document_type_id, is_required)
+                                     VALUES (?, ?, ?)
+                                     ON DUPLICATE KEY UPDATE is_required = VALUES(is_required)"
+                                );
+                                $insert->bind_param("iii", $phase_id, $row['document_type_id'], $row['is_required']);
+                                $insert->execute();
+                                $insert->close();
                             }
-                            $phase_id = $phase_map[$template_id];
-                            $insert = $conn->prepare(
-                                "INSERT INTO phase_required_documents (phase_id, document_type_id, is_required)
-                                 VALUES (?, ?, ?)
-                                 ON DUPLICATE KEY UPDATE is_required = VALUES(is_required)"
-                            );
-                            $insert->bind_param("iii", $phase_id, $row['document_type_id'], $row['is_required']);
-                            $insert->execute();
-                            $insert->close();
                         }
+                        $stmt->close();
                     }
-                    $stmt->close();
 
                     $stmt = $conn->prepare(
                         "SELECT phase_template_id, depends_on_template_id
@@ -867,11 +858,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_document_phase
             $sequence_order = get_next_phase_sequence($conn, $project_id);
             $stmt = $conn->prepare(
                 "INSERT INTO project_phases
-                 (project_id, name, sequence_order, owner_role, assignee_id, phase_type, required_doc_type)
-                 VALUES (?, ?, ?, ?, ?, 'document', ?)"
+                 (project_id, name, sequence_order, owner_role, assignee_id, phase_type)
+                 VALUES (?, ?, ?, ?, ?, 'document')"
             );
-            $stmt->bind_param("isisis", $project_id, $name, $sequence_order, $owner_role, $assignee_id, $doc_type);
+            $stmt->bind_param("isisi", $project_id, $name, $sequence_order, $owner_role, $assignee_id);
             if ($stmt->execute()) {
+                $phase_id = (int) $stmt->insert_id;
+                if ($phase_id > 0) {
+                    $doc_stmt = $conn->prepare(
+                        "SELECT id FROM document_types WHERE code = ? LIMIT 1"
+                    );
+                    $doc_stmt->bind_param("s", $doc_type);
+                    $doc_stmt->execute();
+                    $doc_result = $doc_stmt->get_result();
+                    $doc_row = $doc_result && $doc_result->num_rows === 1 ? $doc_result->fetch_assoc() : null;
+                    $doc_stmt->close();
+                    if ($doc_row) {
+                        $insert = $conn->prepare(
+                            "INSERT INTO phase_required_documents (phase_id, document_type_id, is_required)
+                             VALUES (?, ?, 1)
+                             ON DUPLICATE KEY UPDATE is_required = 1"
+                        );
+                        $insert->bind_param("ii", $phase_id, $doc_row['id']);
+                        $insert->execute();
+                        $insert->close();
+                    }
+                }
                 $success = "Document phase created.";
             } else {
                 $error = "Unable to create document phase.";
@@ -1405,7 +1417,7 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                                                 echo htmlspecialchars(implode(', ', $labels));
                                                 ?>
                                             <?php else: ?>
-                                                <?php echo htmlspecialchars($row['required_doc_type'] ?? ''); ?>
+                                                <span class="muted">None</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
