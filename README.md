@@ -18,6 +18,7 @@ Key features (current)
 ----------------------
 - Authentication and role-based access (admin, designer, firmware, tester, supplier, coordinator)
 - Project creation, overview, and editable metadata (admin)
+- Project code + version required; unique per project
 - Dynamic phases generated from project types and decisions
 - Phase assignments with due dates and status indicators
 - Phase submissions with required documents and dependencies

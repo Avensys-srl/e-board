@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS workflow_transitions (
 CREATE TABLE IF NOT EXISTS projects (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   code VARCHAR(50) NOT NULL,
+  version INT UNSIGNED NOT NULL,
   name VARCHAR(150) NOT NULL,
   project_type VARCHAR(100) NULL,
   owner_id INT UNSIGNED NULL,
@@ -71,7 +72,7 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_projects_code (code),
+  UNIQUE KEY uq_projects_code_version (code, version),
   KEY idx_projects_state (current_state_id),
   KEY idx_projects_owner (owner_id),
   KEY idx_projects_created_by (created_by),

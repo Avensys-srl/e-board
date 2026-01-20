@@ -23,16 +23,20 @@ $error = '';
 $user_id = (int) ($_SESSION['user_id'] ?? 0);
 $is_admin = (($_SESSION['role'] ?? '') === 'admin');
 $project_type_for_requirements = '';
+$project_code = '';
+$project_version = '';
 
 ensure_default_project_workflow($conn);
 
-$stmt = $conn->prepare("SELECT project_type FROM projects WHERE id = ?");
+$stmt = $conn->prepare("SELECT project_type, code, version FROM projects WHERE id = ?");
 $stmt->bind_param("i", $project_id);
 $stmt->execute();
 $result = $stmt->get_result();
 if ($result && $result->num_rows === 1) {
     $row = $result->fetch_assoc();
     $project_type_for_requirements = $row['project_type'] ?? '';
+    $project_code = $row['code'] ?? '';
+    $project_version = $row['version'] ?? '';
 }
 $stmt->close();
 
@@ -65,6 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
         $error = "You are not allowed to update this project.";
     } else {
         $name = trim($_POST['project_name'] ?? '');
+        $code = strtoupper(trim($_POST['project_code'] ?? ''));
+        $code = preg_replace('/\s+/', '-', $code);
+        $version = trim($_POST['project_version'] ?? '');
         $project_type = trim($_POST['project_type_custom'] ?? '');
         $project_type = preg_replace('/\s+/', ' ', $project_type);
         if ($project_type === '') {
@@ -75,23 +82,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
         $start_date = trim($_POST['start_date'] ?? '');
         $description = trim($_POST['description'] ?? '');
 
-        if ($name === '') {
-            $error = "Project name is required.";
+        if ($name === '' || $code === '' || $version === '') {
+            $error = "Project name, code, and version are required.";
+        } elseif (!ctype_digit($version)) {
+            $error = "Project version must be an integer.";
         } else {
-            $owner_id = $owner_id !== '' ? (int) $owner_id : null;
-            $start_date = $start_date !== '' ? $start_date : null;
+            $version = (int) $version;
             $stmt = $conn->prepare(
-                "UPDATE projects
-                 SET name = ?, project_type = ?, owner_id = ?, start_date = ?, description = ?
-                 WHERE id = ?"
+                "SELECT id FROM projects WHERE code = ? AND version = ? AND id <> ? LIMIT 1"
             );
-            $stmt->bind_param("ssissi", $name, $project_type, $owner_id, $start_date, $description, $project_id);
-            if ($stmt->execute()) {
-                $success = "Project updated.";
-            } else {
-                $error = "Unable to update project. " . $stmt->error;
-            }
+            $stmt->bind_param("sii", $code, $version, $project_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $conflict = ($result && $result->num_rows > 0);
             $stmt->close();
+
+            if ($conflict) {
+                $error = "Project code and version must be unique.";
+            } else {
+                $owner_id = $owner_id !== '' ? (int) $owner_id : null;
+                $start_date = $start_date !== '' ? $start_date : null;
+                $stmt = $conn->prepare(
+                    "UPDATE projects
+                 SET code = ?, version = ?, name = ?, project_type = ?, owner_id = ?, start_date = ?, description = ?
+                 WHERE id = ?"
+                );
+                $stmt->bind_param("sississi", $code, $version, $name, $project_type, $owner_id, $start_date, $description, $project_id);
+                if ($stmt->execute()) {
+                    $success = "Project updated.";
+                    $project_code = $code;
+                    $project_version = (string) $version;
+                } else {
+                    $error = "Unable to update project. " . $stmt->error;
+                }
+                $stmt->close();
+            }
         }
     }
 }
@@ -343,7 +368,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_document'])) {
     $upload_base_path = get_setting($conn, 'upload_base_path', 'uploads');
     $upload_base_url = get_setting($conn, 'upload_base_url', '');
 
-    list($ok, $file_data, $upload_error) = store_uploaded_file($_FILES['document_file'] ?? null, $upload_base_path, $upload_base_url);
+    $project_upload_subdir = build_project_subdir($project_code, $project_version);
+    list($ok, $file_data, $upload_error) = store_uploaded_file(
+        $_FILES['document_file'] ?? null,
+        $upload_base_path,
+        $upload_base_url,
+        $project_upload_subdir
+    );
     if (!$ok) {
         $error = $upload_error;
     } else {
@@ -387,7 +418,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_phase_document
         $upload_base_path = get_setting($conn, 'upload_base_path', 'uploads');
         $upload_base_url = get_setting($conn, 'upload_base_url', '');
 
-        list($ok, $file_data, $upload_error) = store_uploaded_file($_FILES['phase_document_file'] ?? null, $upload_base_path, $upload_base_url);
+        $project_upload_subdir = build_project_subdir($project_code, $project_version);
+        list($ok, $file_data, $upload_error) = store_uploaded_file(
+            $_FILES['phase_document_file'] ?? null,
+            $upload_base_path,
+            $upload_base_url,
+            $project_upload_subdir
+        );
         if (!$ok) {
             $error = $upload_error;
         } else {
@@ -879,6 +916,8 @@ $type_result = $conn->query(
     "SELECT DISTINCT project_type FROM projects WHERE project_type IS NOT NULL AND project_type <> ''
      UNION
      SELECT DISTINCT project_type FROM project_type_documents
+     UNION
+     SELECT DISTINCT project_type FROM project_type_phases
      ORDER BY project_type ASC"
 );
 if ($type_result) {
@@ -993,7 +1032,7 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                 <p class="eyebrow">Project</p>
                 <h1><?php echo htmlspecialchars($project['name']); ?></h1>
                 <p class="muted">
-                    <?php echo htmlspecialchars($project['code']); ?>
+                    <?php echo htmlspecialchars($project['code']); ?> v<?php echo htmlspecialchars($project['version'] ?? ''); ?>
                     <?php if (!empty($project['project_type'])): ?>
                         | <?php echo htmlspecialchars($project['project_type']); ?>
                     <?php endif; ?>
@@ -1046,6 +1085,12 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                     </div>
                     <?php if ($is_admin): ?>
                         <form class="form-grid" method="POST" action="project_view.php?id=<?php echo (int) $project_id; ?>">
+                            <label for="project_code">Project code</label>
+                            <input id="project_code" type="text" name="project_code" value="<?php echo htmlspecialchars($project['code']); ?>" required>
+
+                            <label for="project_version">Project version</label>
+                            <input id="project_version" type="number" name="project_version" value="<?php echo htmlspecialchars($project['version'] ?? ''); ?>" min="1" step="1" required>
+
                             <label for="project_name">Project name</label>
                             <input id="project_name" type="text" name="project_name" value="<?php echo htmlspecialchars($project['name']); ?>" required>
 
@@ -1084,6 +1129,14 @@ $roles = ['admin', 'designer', 'firmware', 'tester', 'supplier', 'coordinator'];
                         </form>
                     <?php else: ?>
                         <div class="info-grid">
+                            <div>
+                                <div class="info-label">Project code</div>
+                                <div class="info-value"><?php echo htmlspecialchars($project['code']); ?></div>
+                            </div>
+                            <div>
+                                <div class="info-label">Version</div>
+                                <div class="info-value"><?php echo htmlspecialchars($project['version'] ?? ''); ?></div>
+                            </div>
                             <div>
                                 <div class="info-label">Owner</div>
                                 <div class="info-value"><?php echo htmlspecialchars($project['owner_name'] ?? ''); ?></div>
