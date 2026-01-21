@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input class="btn btn-primary" type="submit" value="Login">
             </form>
 
-            <p class="link-row">Don't have an account? <a href="register.php">Register</a></p>
+            <p class="link-row">Need access? Contact an administrator.</p>
         </main>
     </div>
 </body>

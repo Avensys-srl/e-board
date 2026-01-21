@@ -2,8 +2,12 @@
 session_start();
 require_once __DIR__ . '/config/db.php';
 
-// If a non-admin user is already logged in, go to the dashboard
-if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') !== 'admin') {
+// Only admins can access this page
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+if (($_SESSION['role'] ?? '') !== 'admin') {
     header('Location: dashboard.php');
     exit;
 }
@@ -43,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("sss", $username, $password, $role);
             $stmt->execute();
 
-            $success = "User registered successfully. You can now login.";
+            $success = "User created successfully.";
             $stmt->close();
         }
 
@@ -99,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input class="btn btn-primary" type="submit" value="Create user">
             </form>
 
-            <p class="link-row"><a href="login.php">Back to login</a></p>
+            <p class="link-row"><a href="dashboard.php">Back to dashboard</a></p>
         </main>
     </div>
 </body>
