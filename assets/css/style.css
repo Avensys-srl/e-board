@@ -15,11 +15,11 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
   min-height: 100vh;
   padding: 32px 18px 48px;
-  font-family: "IBM Plex Sans", "Source Sans 3", "Noto Sans", sans-serif;
+  font-family: Arial, sans-serif;
   color: var(--text);
   background: radial-gradient(circle at 18% 18%, #e5edf8 0%, #f3f5f9 45%, #eef2f7 100%);
 }
@@ -39,8 +39,11 @@ body::before {
 
 h1, h2 {
   margin: 0 0 12px;
-  font-family: "Cormorant Garamond", "Times New Roman", serif;
+  font-family: Arial, sans-serif;
   letter-spacing: 0.3px;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: Arial, sans-serif;
 }
 
 h1 {
