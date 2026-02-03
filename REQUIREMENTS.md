@@ -76,20 +76,20 @@ Phases belong to a project and have:
 - optional assignee
 - due date
 - completion status
-- required document types
+- required documents (multiple per phase)
 - dependencies on other phases
 
 Rules:
 - A phase can be submitted or completed only if:
-  - all required document types are present
+  - all required documents are present
   - all dependent phases are completed
 - Phases can run in parallel; dependencies can enforce sequencing.
 
 9. Document management (project-based)
 --------------------------------------
 Documents can be attached at:
-- project level
-- phase level
+- project level (optional)
+- phase level (primary)
 - version level
 
 File manager must be project-based and include a Trash:
@@ -100,19 +100,20 @@ File manager must be project-based and include a Trash:
 10. Project types and phase templates
 -------------------------------------
 Project types are managed by Admin.
-Each project type defines default phase templates (name, role, type).
+Phase templates are defined once and reused across project types.
 Rules:
 - Project type can be edited/renamed by Admin.
 - Project type can be deleted only if not used by any project.
-- Phase templates can be added to new projects of that type.
+- Phase templates are assigned to project types with sequence + mandatory flag.
+- Phase templates can be edited always; deleted only when unused.
 
 11. Document types and requirements
 -----------------------------------
 Document types are managed by Admin (standard list).
-Document requirements are attached to specific phases.
+Document requirements are attached to phase templates (multiple allowed).
 Rules:
-- Required document types cannot be removed for an active project type.
-- Phase completion is blocked until required document types are present.
+- Document types can be edited always; deleted only when unused.
+- Phase completion is blocked until required documents are present.
 
 12. Versioning
 --------------

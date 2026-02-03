@@ -8,7 +8,7 @@ constraints and how entities relate to each other.
 - A **Project** is identified by `code` + `version` (unique pair).
 - A Project evolves through **phases** and **approvals**.
 - **Documents** are uploaded and linked to phases; projects can also define
-  project-level document requirements.
+  optional project-level document requirements.
 
 ## Templates and configuration
 
@@ -75,4 +75,3 @@ Configuration is split into three areas:
 - **Create templates**: document types -> phase templates -> project type setup.
 - **Create project**: define code + version + metadata -> generate phases.
 - **Work phases**: upload documents -> submit phase -> approve/reject.
-

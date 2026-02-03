@@ -24,7 +24,7 @@ Key features (current)
 - Phase submissions with required documents and dependencies
 - Project and phase document uploads
 - Project-based file manager with trash (soft delete), hard delete for admin only
-- Document types managed by admin and required per phase
+- Document types managed by admin and required per phase templates
 - Notifications (project-level and user-level) with read/unread status
 - Workflow transitions for project states with history
 - Admin settings for upload base path/URL
@@ -51,7 +51,7 @@ Configuration
 
 Main pages
 ----------
-- `login.php` / `register.php`
+- `login.php` / `register.php` (admin-only user creation)
 - `dashboard.php`
 - `projects.php`
 - `project_view.php`
